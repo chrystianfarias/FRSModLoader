@@ -19,6 +19,10 @@ refs/
 mods/
 plugins/
 
+# The UI's font (Helvetica Neue) is licensed, not ours to redistribute: it is
+# installed locally beside nfsu2.css.
+ui/fonts/
+
 # Visual Studio / CMake, per machine
 .vs/
 .vscode/

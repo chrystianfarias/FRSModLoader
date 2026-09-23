@@ -64,7 +64,15 @@ namespace
     JSValue Capture(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
         bool on = argc < 1 || JS_ToBool(ctx, argv[0]) != 0;
-        InputRouter::SetCapturing(on);
+        // speed.ui.capture(true, { mouse: false }): the keyboard only.
+        bool mouse = true;
+        if (argc >= 2 && JS_IsObject(argv[1]))
+        {
+            JSValue m = JS_GetPropertyStr(ctx, argv[1], "mouse");
+            if (!JS_IsUndefined(m)) mouse = JS_ToBool(ctx, m) != 0;
+            JS_FreeValue(ctx, m);
+        }
+        InputRouter::SetCapturing(on, mouse);
         return JS_UNDEFINED;
     }
 

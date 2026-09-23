@@ -33,6 +33,47 @@
  * the same page runs at 800x600 and at 4K.
  */
 
+/* ------------------------------------------------------------------ the face
+ *
+ * Helvetica Neue, the face of the game's interface, from ui/fonts beside this
+ * file (the URLs resolve against the stylesheet). Every weight and its italic
+ * is declared, so a rule asks for weight and style and gets the real cut
+ * rather than one the browser fakes. The files are a licensed font and stay
+ * out of the repository: see .gitignore.
+ */
+@font-face { font-family: "Helvetica Neue"; font-weight: 100; font-style: normal;
+  src: local("HelveticaNeueUltraLight"), url("fonts/HelveticaNeueUltraLight.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 100; font-style: italic;
+  src: local("HelveticaNeueUltraLightItalic"), url("fonts/HelveticaNeueUltraLightItalic.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 200; font-style: normal;
+  src: local("HelveticaNeueThin"), url("fonts/HelveticaNeueThin.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 200; font-style: italic;
+  src: local("HelveticaNeueThinItalic"), url("fonts/HelveticaNeueThinItalic.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 300; font-style: normal;
+  src: local("HelveticaNeueLight"), url("fonts/HelveticaNeueLight.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 300; font-style: italic;
+  src: local("HelveticaNeueLightItalic"), url("fonts/HelveticaNeueLightItalic.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 400; font-style: normal;
+  src: local("HelveticaNeueRoman"), url("fonts/HelveticaNeueRoman.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 400; font-style: italic;
+  src: local("HelveticaNeueItalic"), url("fonts/HelveticaNeueItalic.ttf") format("truetype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 500; font-style: normal;
+  src: local("HelveticaNeueMedium"), url("fonts/HelveticaNeueMedium.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 500; font-style: italic;
+  src: local("HelveticaNeueMediumItalic"), url("fonts/HelveticaNeueMediumItalic.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 700; font-style: normal;
+  src: local("HelveticaNeueBold"), url("fonts/HelveticaNeueBold.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 700; font-style: italic;
+  src: local("HelveticaNeueBoldItalic"), url("fonts/HelveticaNeueBoldItalic.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 800; font-style: normal;
+  src: local("HelveticaNeueHeavy"), url("fonts/HelveticaNeueHeavy.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 800; font-style: italic;
+  src: local("HelveticaNeueHeavyItalic"), url("fonts/HelveticaNeueHeavyItalic.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 900; font-style: normal;
+  src: local("HelveticaNeueBlack"), url("fonts/HelveticaNeueBlack.otf") format("opentype"); }
+@font-face { font-family: "Helvetica Neue"; font-weight: 900; font-style: italic;
+  src: local("HelveticaNeueBlackItalic"), url("fonts/HelveticaNeueBlackItalic.otf") format("opentype"); }
+
 .nfs {
   /* ----------------------------------------------------------- the palette
    *
@@ -75,11 +116,10 @@
   --nfs-size: 15px;
   --nfs-radius: 10px;
 
-  /* Condensed, slanted, a little industrial. Nothing shipped with Windows is
-   * the game's face exactly; this is the closest stack that is always there,
-   * and the italic is what carries the resemblance. */
-  font: italic 400 var(--nfs-size)/1.25 "Segoe UI", "Arial Narrow", Arial,
-        system-ui, sans-serif;
+  /* The game's own face (the @font-face rules above), italic as its menus
+   * set it; the rest of the stack is for a page opened without ui/fonts. */
+  font: italic 400 var(--nfs-size)/1.25 "Helvetica Neue", "Segoe UI", "Arial Narrow",
+        Arial, system-ui, sans-serif;
   color: var(--nfs-ink);
   letter-spacing: .01em;
   -webkit-font-smoothing: antialiased;

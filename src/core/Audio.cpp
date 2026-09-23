@@ -26,6 +26,11 @@ namespace
     {
         IXAudio2SourceVoice* voice = nullptr;
         int                  sound = 0;     // which sound it was built for
+        // A volume ramp, run by Tick(): from `from` to `to` over `ms`, then
+        // stop the voice if `stopAtEnd`. `ms` 0 is no ramp.
+        float from = 0, to = 0, volume = 1;
+        DWORD start = 0, ms = 0;
+        bool  stopAtEnd = false;
     };
 
     std::vector<Voice>       g_voices;
@@ -233,6 +238,11 @@ namespace Audio
 
     bool Play(int id, float volume, float pitch)
     {
+        return Play(id, volume, pitch, false, 0);
+    }
+
+    bool Play(int id, float volume, float pitch, bool loop, DWORD fadeInMs)
+    {
         if (!g_ready) return false;
 
         auto it = g_sounds.find(id);
@@ -246,6 +256,8 @@ namespace Audio
         buf.AudioBytes = (UINT32)s.data.size();
         buf.pAudioData = s.data.data();
         buf.Flags = XAUDIO2_END_OF_STREAM;
+        // The whole buffer again and again, sample-exact, until stopped.
+        if (loop) buf.LoopCount = XAUDIO2_LOOP_INFINITE;
 
         voice->Stop(0);
         voice->FlushSourceBuffers();
@@ -255,7 +267,17 @@ namespace Audio
         if (pitch < 0.03125f) pitch = 0.03125f;     // XAudio2's floor
         if (pitch > 4.0f) pitch = 4.0f;
 
-        voice->SetVolume(volume * g_masterVolume);
+        for (auto& v : g_voices)
+        {
+            if (v.voice != voice) continue;
+            v.volume = volume;
+            v.from = 0;
+            v.to = volume;
+            v.start = GetTickCount();
+            v.ms = fadeInMs;
+            v.stopAtEnd = false;
+        }
+        voice->SetVolume((fadeInMs ? 0.0f : volume) * g_masterVolume);
         voice->SetFrequencyRatio(pitch);
         return SUCCEEDED(voice->Start(0));
     }
@@ -263,7 +285,49 @@ namespace Audio
     void Stop(int id)
     {
         for (auto& v : g_voices)
-            if (v.voice && v.sound == id) { v.voice->Stop(0); v.voice->FlushSourceBuffers(); }
+            if (v.voice && v.sound == id) { v.voice->Stop(0); v.voice->FlushSourceBuffers(); v.ms = 0; }
+    }
+
+    void FadeOut(int id, DWORD ms)
+    {
+        if (!ms) { Stop(id); return; }
+        for (auto& v : g_voices)
+        {
+            if (!v.voice || v.sound != id) continue;
+            XAUDIO2_VOICE_STATE st;
+            v.voice->GetState(&st);
+            if (st.BuffersQueued == 0) continue;
+            // From wherever it is now: a fade that was still coming in goes
+            // back down from its current level, not from the top.
+            float now = v.volume;
+            if (v.ms)
+            {
+                float t = (float)(GetTickCount() - v.start) / (float)v.ms;
+                if (t > 1.0f) t = 1.0f;
+                now = v.from + (v.to - v.from) * t;
+            }
+            v.from = now;
+            v.to = 0;
+            v.start = GetTickCount();
+            v.ms = ms;
+            v.stopAtEnd = true;
+        }
+    }
+
+    void Tick()
+    {
+        const DWORD now = GetTickCount();
+        for (auto& v : g_voices)
+        {
+            if (!v.voice || !v.ms) continue;
+            float t = (float)(now - v.start) / (float)v.ms;
+            if (t > 1.0f) t = 1.0f;
+            v.voice->SetVolume((v.from + (v.to - v.from) * t) * g_masterVolume);
+            if (t < 1.0f) continue;
+            v.ms = 0;
+            v.volume = v.to;
+            if (v.stopAtEnd) { v.voice->Stop(0); v.voice->FlushSourceBuffers(); v.stopAtEnd = false; }
+        }
     }
 
     void StopAll()

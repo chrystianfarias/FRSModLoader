@@ -32,10 +32,18 @@ namespace Audio
     // 2.0 = one octave up. Returns false if the sound does not exist or if
     // every voice in the pool is busy.
     bool Play(int id, float volume, float pitch);
+    // The same, looping the whole sound until stopped when `loop`, and
+    // rising from silence over `fadeInMs`.
+    bool Play(int id, float volume, float pitch, bool loop, DWORD fadeInMs);
 
     // Stops what is playing: one sound, or everything.
     void Stop(int id);
     void StopAll();
+    // Down to silence over `ms`, then stopped.
+    void FadeOut(int id, DWORD ms);
+
+    // Once a frame: moves the fades along.
+    void Tick();
 
     // Applies to everything, on top of each Play's own volume.
     void SetMasterVolume(float volume);

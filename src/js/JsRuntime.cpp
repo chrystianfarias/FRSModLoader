@@ -300,8 +300,29 @@ namespace Js
         return mod;
     }
 
+    namespace
+    {
+        struct Posted { Mod* from; std::string event, json; };
+        std::vector<Posted> g_posted;
+    }
+
+    void Post(Mod* from, const std::string& event, const std::string& json)
+    {
+        // Bounded: a mod that emits every frame with nobody listening must not
+        // grow this without end.
+        if (g_posted.size() < 1024) g_posted.push_back({ from, event, json });
+    }
+
     void Frame()
     {
+        // Taken out first: a handler may emit again, and that goes to the next
+        // frame rather than into this loop.
+        std::vector<Posted> posted;
+        posted.swap(g_posted);
+        for (const Posted& p : posted)
+            for (size_t i = 0; i < g_mods.size(); i++)
+                if (g_mods[i] != p.from) EmitTo(g_mods[i], p.event.c_str(), p.json);
+
         for (size_t i = 0; i < g_mods.size(); i++)
         {
             RunTimers(g_mods[i]);

@@ -10,6 +10,9 @@ namespace
     WNDPROC g_origWndProc = 0;
     HWND    g_hwnd = 0;
     bool    g_capturing = false;
+    bool    g_mouse = true;          // with the keyboard, the mouse too
+    bool    g_cursorShown = false;
+    bool    g_commandAsked = false;  // a "/" was typed; see TakeCommandRequest
     int     g_toggleKey = VK_F1;
 
     // Circular key queue for mods. Sixteen is plenty: the main loop drains it
@@ -60,6 +63,15 @@ namespace
             return 0;
         }
 
+        // "/" opens the command bar, and it is the character that counts, not
+        // the key: on a Brazilian (ABNT2) keyboard the key where a US one has
+        // "/" (VK_OEM_2) types ";", and "/" is VK_ABNT_C1 or the keypad's.
+        if (msg == WM_CHAR && wParam == '/' && !g_capturing && !(lParam & (1 << 30)))
+        {
+            g_commandAsked = true;
+            return 0;
+        }
+
         // Auto-repeat from a held key (bit 30) is of no interest to mods.
         if (keyDown && !g_capturing && !(lParam & (1 << 30)))
             PushKey((int)wParam);
@@ -68,7 +80,18 @@ namespace
         // the window menu and the game loses focus mid-race.
         if (msg == WM_SYSKEYDOWN && (int)wParam == VK_F10) return 0;
 
-        if (g_capturing)
+        if (g_capturing && !g_mouse)
+        {
+            switch (msg)
+            {
+            case WM_KEYDOWN: case WM_KEYUP:
+            case WM_SYSKEYDOWN: case WM_SYSKEYUP:
+            case WM_CHAR: case WM_SYSCHAR:
+                CefHost::Key(msg, wParam, lParam);
+                return 0;
+            }
+        }
+        else if (g_capturing)
         {
             int x, y;
             switch (msg)
@@ -154,6 +177,13 @@ namespace InputRouter
 
     bool IsCapturing() { return g_capturing; }
 
+    bool TakeCommandRequest()
+    {
+        const bool asked = g_commandAsked;
+        g_commandAsked = false;
+        return asked;
+    }
+
     int PopKey()
     {
         if (g_keyTail == g_keyHead) return 0;
@@ -162,19 +192,32 @@ namespace InputRouter
         return vk;
     }
 
-    void SetCapturing(bool capturing)
+    void SetCapturing(bool capturing, bool mouse)
     {
-        if (capturing == g_capturing) return;
+        if (capturing == g_capturing && (!capturing || mouse == g_mouse)) return;
+        const bool wasMouse = g_capturing && g_mouse;
         g_capturing = capturing;
+        g_mouse = mouse;
 
         CefHost::SetFocus(capturing);
-        // The game hides the cursor; with the UI up it has to come back.
-        while (ShowCursor(capturing ? TRUE : FALSE) < 0 && capturing) {}
-        if (!capturing)
+        // The game hides the cursor; with the UI taking the mouse it has to
+        // come back, and go again when the mouse returns to the game.
+        const bool wantCursor = capturing && mouse;
+        if (wantCursor && !g_cursorShown)
+        {
+            while (ShowCursor(TRUE) < 0) {}
+            g_cursorShown = true;
+        }
+        else if (!wantCursor && g_cursorShown)
+        {
+            ShowCursor(FALSE);
+            g_cursorShown = false;
+        }
+        if (wasMouse && !wantCursor)
         {
             ReleaseCapture();
             CefHost::MouseLeave();
         }
-        LogIn("UI capture: %s", capturing ? "on" : "off");
+        LogIn("UI capture: %s", !capturing ? "off" : mouse ? "on" : "on (keyboard only)");
     }
 }

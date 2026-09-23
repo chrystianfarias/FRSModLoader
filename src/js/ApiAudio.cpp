@@ -47,9 +47,18 @@ namespace
         int32_t id = 0;
         if (JS_ToInt32(ctx, &id, argv[0])) return JS_EXCEPTION;
 
-        double volume = 1.0, pitch = 1.0;
+        double volume = 1.0, pitch = 1.0, fadeIn = 0.0;
+        bool loop = false;
         if (argc >= 2 && JS_IsObject(argv[1]))
         {
+            JSValue l = JS_GetPropertyStr(ctx, argv[1], "loop");
+            loop = JS_ToBool(ctx, l) > 0;
+            JS_FreeValue(ctx, l);
+
+            JSValue f = JS_GetPropertyStr(ctx, argv[1], "fadeIn");
+            if (!JS_IsUndefined(f)) JS_ToFloat64(ctx, &fadeIn, f);
+            JS_FreeValue(ctx, f);
+
             JSValue v = JS_GetPropertyStr(ctx, argv[1], "volume");
             if (!JS_IsUndefined(v)) JS_ToFloat64(ctx, &volume, v);
             JS_FreeValue(ctx, v);
@@ -59,7 +68,8 @@ namespace
             JS_FreeValue(ctx, p);
         }
 
-        return JS_NewBool(ctx, Audio::Play(id, (float)volume, (float)pitch));
+        return JS_NewBool(ctx, Audio::Play(id, (float)volume, (float)pitch, loop,
+                                           fadeIn > 0 ? (DWORD)fadeIn : 0));
     }
 
     JSValue Stop(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
@@ -68,7 +78,17 @@ namespace
 
         int32_t id = 0;
         if (JS_ToInt32(ctx, &id, argv[0])) return JS_EXCEPTION;
-        Audio::Stop(id);
+
+        // speed.audio.stop(id, { fade: 400 }): down to silence first.
+        double fade = 0.0;
+        if (argc >= 2 && JS_IsObject(argv[1]))
+        {
+            JSValue f = JS_GetPropertyStr(ctx, argv[1], "fade");
+            if (!JS_IsUndefined(f)) JS_ToFloat64(ctx, &fade, f);
+            JS_FreeValue(ctx, f);
+        }
+        if (fade > 0) Audio::FadeOut(id, (DWORD)fade);
+        else Audio::Stop(id);
         return JS_UNDEFINED;
     }
 
@@ -107,7 +127,7 @@ namespace Js
 
         JS_SetPropertyStr(ctx, audio, "load",    JS_NewCFunction(ctx, Load, "load", 1));
         JS_SetPropertyStr(ctx, audio, "play",    JS_NewCFunction(ctx, Play, "play", 2));
-        JS_SetPropertyStr(ctx, audio, "stop",    JS_NewCFunction(ctx, Stop, "stop", 1));
+        JS_SetPropertyStr(ctx, audio, "stop",    JS_NewCFunction(ctx, Stop, "stop", 2));
         JS_SetPropertyStr(ctx, audio, "stopAll", JS_NewCFunction(ctx, StopAll, "stopAll", 0));
         JS_SetPropertyStr(ctx, audio, "unload",  JS_NewCFunction(ctx, Unload, "unload", 1));
         JS_SetPropertyStr(ctx, audio, "volume",  JS_NewCFunction(ctx, Volume, "volume", 1));

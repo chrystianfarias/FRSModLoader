@@ -15,7 +15,14 @@ namespace InputRouter
     void Shutdown();
 
     bool IsCapturing();
-    void SetCapturing(bool capturing);
+
+    // Whether "/" was typed since the last call (by character, whatever the
+    // keyboard layout): the main loop opens the command bar then.
+    bool TakeCommandRequest();
+    // With `mouse` false only the keyboard goes to the UI: the mouse stays
+    // with the game and no cursor appears. For screens driven the way the
+    // game's own are, arrows, Enter and Esc.
+    void SetCapturing(bool capturing, bool mouse = true);
 
     // Keys pressed while the UI is NOT capturing, for mods to listen to
     // (`speed.on("keydown", ...)`). Returns 0 when the queue drains.

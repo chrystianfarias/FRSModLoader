@@ -14,6 +14,7 @@
 #include <windows.h>
 
 #include "bridge/Bridge.h"
+#include "core/Audio.h"
 #include "core/Config.h"
 #include "core/Hook.h"
 #include "core/Log.h"
@@ -99,23 +100,25 @@ namespace
         else
         {
             InputRouter::Update();
+            Audio::Tick();
             D3D9Hook::Tick();
             Bridge::Drain();
             Host::Tick();
+
+            // "/" opens the console. It is handled here and not in a mod
+            // because the bar belongs to the loader: any mod can register
+            // commands into it.
+            if (InputRouter::TakeCommandRequest() && !InputRouter::IsCapturing())
+            {
+                InputRouter::SetCapturing(true);
+                CefHost::SendToUi("sl:command-open", "null");
+                LogIn("command bar opened");
+            }
 
             // Keys the game does not use (it reads no keyboard messages) turn
             // into events for the mods.
             for (int vk = InputRouter::PopKey(); vk; vk = InputRouter::PopKey())
             {
-                // "/" opens the console instead of reaching the mods. It is
-                // handled here and not in a mod because the bar belongs to the
-                // loader: any mod can register commands into it.
-                if (vk == VK_OEM_2 && !InputRouter::IsCapturing())
-                {
-                    InputRouter::SetCapturing(true);
-                    CefHost::SendToUi("sl:command-open", "null");
-                    continue;
-                }
 
                 char json[48];
                 _snprintf(json, sizeof(json), "{\"key\":%d}", vk);

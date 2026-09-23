@@ -34,6 +34,10 @@ namespace Js
     void Emit(const char* event, const std::string& json);
     void EmitTo(Mod* mod, const char* event, const std::string& json);
 
+    // speed.emit: one mod's event for the others, delivered at the start of
+    // the next frame so no mod runs inside another's call.
+    void Post(Mod* from, const std::string& event, const std::string& json);
+
     // A message from the UI, as "<modId>:<channel>". It goes only to its owner.
     void DispatchUiMessage(const std::string& channel, const std::string& json);
 }

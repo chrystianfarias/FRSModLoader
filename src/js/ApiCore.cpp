@@ -111,6 +111,34 @@ namespace
         return JS_UNDEFINED;
     }
 
+    // speed.emit("fuel:state", { litros: 12 }) - to every OTHER mod's
+    // speed.on("fuel:state"), next frame. The name needs a colon, so it cannot
+    // pass for one of the loader's own events ("frame", "keydown", ...).
+    JSValue EmitEvent(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Js::Mod* mod = Js::Owner(ctx);
+        if (!mod || argc < 1) return JS_ThrowTypeError(ctx, "speed.emit(event, data?)");
+
+        const char* event = JS_ToCString(ctx, argv[0]);
+        if (!event) return JS_EXCEPTION;
+        std::string name = event;
+        JS_FreeCString(ctx, event);
+        if (name.find(':') == std::string::npos || name.compare(0, 3, "ui:") == 0)
+            return JS_ThrowTypeError(ctx, "speed.emit: the event needs a colon, as in \"fuel:state\"");
+
+        std::string json;
+        if (argc >= 2 && !JS_IsUndefined(argv[1]))
+        {
+            JSValue text = JS_JSONStringify(ctx, argv[1], JS_UNDEFINED, JS_UNDEFINED);
+            if (JS_IsException(text)) return JS_EXCEPTION;
+            const char* enc = JS_ToCString(ctx, text);
+            if (enc) { json = enc; JS_FreeCString(ctx, enc); }
+            JS_FreeValue(ctx, text);
+        }
+        Js::Post(mod, name, json);
+        return JS_UNDEFINED;
+    }
+
     JSValue Off(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
         Js::Mod* mod = Js::Owner(ctx);
@@ -255,6 +283,7 @@ namespace Js
         JS_SetPropertyStr(ctx, speed, "version", JS_NewString(ctx, "0.1.0"));
         JS_SetPropertyStr(ctx, speed, "on",  JS_NewCFunction(ctx, On, "on", 2));
         JS_SetPropertyStr(ctx, speed, "off", JS_NewCFunction(ctx, Off, "off", 2));
+        JS_SetPropertyStr(ctx, speed, "emit", JS_NewCFunction(ctx, EmitEvent, "emit", 2));
         JS_SetPropertyStr(ctx, speed, "now", JS_NewCFunction(ctx, Now, "now", 0));
         JS_SetPropertyStr(ctx, speed, "mods", JS_NewCFunction(ctx, ModList, "mods", 0));
 

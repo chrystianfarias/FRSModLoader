@@ -51,6 +51,13 @@ declare namespace speed {
     function on(event: string, cb: (data: any) => void): void;
     /** Without `cb`, removes every listener for that event. */
     function off(event: string, cb?: Function): void;
+    /**
+     * An event for the other mods: every other mod's `speed.on(event)` gets
+     * `data` (as JSON, so plain values only) at the start of the next frame.
+     * The name needs a colon, e.g. `"fuel:state"`, so it cannot be mistaken
+     * for one of the loader's events. Not delivered to the sender.
+     */
+    function emit(event: string, data?: any): void;
 
     // ------------------------------------------------------------------- game
     namespace game {
@@ -309,10 +316,16 @@ declare namespace speed {
          * is still busy - so overlapping pops degrade by dropping one, never
          * by cutting another short.
          */
-        function play(id: number, options?: { volume?: number; pitch?: number }): boolean;
+        function play(id: number, options?: {
+            volume?: number; pitch?: number;
+            /** Repeat the whole sound, sample-exact, until stopped. */
+            loop?: boolean;
+            /** Rise from silence over this many ms. */
+            fadeIn?: number;
+        }): boolean;
 
-        /** Silences one sound; with no id, everything. */
-        function stop(id?: number): void;
+        /** Silences one sound; with no id, everything. `fade` goes down over that many ms first. */
+        function stop(id?: number, options?: { fade?: number }): void;
         function stopAll(): void;
 
         /** Frees the sound's memory and its voices. */
@@ -336,8 +349,13 @@ declare namespace speed {
         function toggle(): boolean;
         function visible(): boolean;
 
-        /** Hands keyboard and mouse to the UI (same as the key in the ini). */
-        function capture(on?: boolean): void;
+        /**
+         * Hands keyboard and mouse to the UI (same as the key in the ini).
+         * With `{ mouse: false }` only the keyboard goes: no cursor appears
+         * and the mouse stays with the game - for screens driven like the
+         * game's own, with arrows, Enter and Esc.
+         */
+        function capture(on?: boolean, options?: { mouse?: boolean }): void;
         function capturing(): boolean;
 
         /** Reloads the page; with `true`, ignoring the cache. */
