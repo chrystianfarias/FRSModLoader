@@ -7,7 +7,11 @@
 // NFSU2 does not read the keyboard through any window message (see the Pops
 // notes), which works in our favour here: we can intercept WM_KEY* without
 // taking anything away from the game. It does use the mouse through
-// DirectInput, so while the UI has focus, mouse events are swallowed.
+// DirectInput, so while the UI has the mouse, the game's clicks are swallowed.
+//
+// The keyboard goes to the UI only on F1 (or when a mod asks). The mouse needs
+// no key: where the page drew something, clicks and the wheel are the page's;
+// where the game shows through, the game's.
 namespace InputRouter
 {
     void Install(int toggleVirtualKey);
@@ -15,6 +19,12 @@ namespace InputRouter
     void Shutdown();
 
     bool IsCapturing();
+    // Capturing with the mouse too (the default), not keyboard-only.
+    bool IsCapturingMouse();
+    // Whether the page has the mouse right now: captured, or - with no F1 -
+    // the pointer over something the page drew, or a press that began there.
+    // The game's clicks are held back while it does.
+    bool MouseOnUi();
 
     // Whether "/" was typed since the last call (by character, whatever the
     // keyboard layout): the main loop opens the command bar then.

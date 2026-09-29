@@ -26,79 +26,135 @@ namespace
     tCreateDevice       g_origCreate   = 0;
     tDirectInput8Create g_origCreateDI = 0;
 
-    void* HookVTable(void* obj, int index, void* novo)
+    // Keyboard and mouse share one vtable, so the hooks see both; the buffered
+    // reads only tell them apart by device.
+    const GUID GUID_SysMouse_ = { 0x6F1D2B60, 0xD5A0, 0x11CF,
+                                  { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 } };
+    void* g_mouseDevice = 0;
+
+    void* HookVTable(void* obj, int index, void* replacement)
     {
         void** vt = *(void***)obj;
         DWORD old;
         VirtualProtect(&vt[index], sizeof(void*), PAGE_READWRITE, &old);
-        void* anterior = vt[index];
-        vt[index] = novo;
+        void* previous = vt[index];
+        vt[index] = replacement;
         VirtualProtect(&vt[index], sizeof(void*), old, &old);
-        return anterior;
+        return previous;
     }
 
-    HRESULT STDMETHODCALLTYPE GetDeviceStateHook(void* self, DWORD tamanho, void* dados)
+    HRESULT STDMETHODCALLTYPE GetDeviceStateHook(void* self, DWORD size, void* buffer)
     {
-        HRESULT hr = g_origGetState(self, tamanho, dados);
+        HRESULT hr = g_origGetState(self, size, buffer);
 
-        // 256 bytes is the keyboard state; the mouse and pads have their own
-        // sizes and are left alone, so the player can still look around with the
-        // mouse while typing.
-        if (SUCCEEDED(hr) && dados && tamanho == 256 && InputRouter::IsCapturing())
-            memset(dados, 0, tamanho);
+        // 256 bytes is the keyboard state, blocked while the UI has the
+        // keyboard. The mouse (DIMOUSESTATE, 16 bytes, or DIMOUSESTATE2, 20)
+        // is blocked while the page has the mouse - captured, or the pointer
+        // over something it drew: the game takes the cursor position from
+        // GetCursorPos and the clicks from here, so a button under a page
+        // would still be clicked. Pads are never touched.
+        if (SUCCEEDED(hr) && buffer)
+        {
+            if (size == 256 && InputRouter::IsCapturing())
+                memset(buffer, 0, size);
+            else if ((size == 16 || size == 20) && InputRouter::MouseOnUi())
+                memset(buffer, 0, size);
+        }
 
         return hr;
     }
 
-    // O outro caminho, e o que o NFSU2 usa de fato: leitura em BUFFER, onde os
-    // eventos de tecla vem numa fila em vez de um retrato do teclado. Zerar o
-    // retrato nao adianta nada se o jogo nunca o pede.
+    // What a blocked read still lets through: releases. The press that hands
+    // the input to the UI - the Enter, or the click, on a menu entry that
+    // opens a panel - reaches the game; its release comes a moment later,
+    // with the UI holding the input. Swallowed, the game's menu would keep
+    // that key down for good and ignore every press after it. Presses, and
+    // the mouse's movement, go; releases of keys and buttons stay, compacted
+    // to the front of the buffer. Returns how many are left.
     //
-    // Enquanto o console esta aberto, a fila e drenada e reportada como vazia:
-    // os eventos somem para o jogo, mas nao ficam acumulados para chegarem
-    // todos juntos quando a barra fechar.
-    HRESULT STDMETHODCALLTYPE GetDeviceDataHook(void* self, DWORD tamanhoItem,
-                                                void* dados, DWORD* quantidade,
+    // An item is a DIDEVICEOBJECTDATA: dwOfs (+0), dwData (+4, bit 0x80 =
+    // down). On the keyboard dwOfs is the key; on the mouse 0/4/8 are the
+    // axes and 12 on the buttons.
+    DWORD KeepReleases(void* buffer, DWORD itemSize, DWORD count, bool mouse)
+    {
+        unsigned char* base = (unsigned char*)buffer;
+        DWORD kept = 0;
+        for (DWORD i = 0; i < count; i++)
+        {
+            unsigned char* item = base + (size_t)i * itemSize;
+            const DWORD ofs = *(DWORD*)item;
+            const DWORD data = *(DWORD*)(item + 4);
+            const bool release = !(data & 0x80) && (!mouse || ofs >= 12);
+            if (!release) continue;
+            if (kept != i) memmove(base + (size_t)kept * itemSize, item, itemSize);
+            kept++;
+        }
+        return kept;
+    }
+
+    // The other path, and the one NFSU2 actually uses: BUFFERED reads, where
+    // key events come in a queue instead of a snapshot of the keyboard.
+    // Zeroing the snapshot does nothing if the game never asks for it.
+    //
+    // While the UI has the input, the queue is drained and only the releases
+    // stay (KeepReleases): the presses vanish for the game, without piling up
+    // to arrive all at once when the UI gives the input back.
+    HRESULT STDMETHODCALLTYPE GetDeviceDataHook(void* self, DWORD itemSize,
+                                                void* buffer, DWORD* count,
                                                 DWORD flags)
     {
-        HRESULT hr = g_origGetData(self, tamanhoItem, dados, quantidade, flags);
+        HRESULT hr = g_origGetData(self, itemSize, buffer, count, flags);
 
-        if (SUCCEEDED(hr) && quantidade && InputRouter::IsCapturing())
-            *quantidade = 0;
+        if (SUCCEEDED(hr) && count)
+        {
+            const bool mouse = self == g_mouseDevice;
+            const bool blocked = mouse ? InputRouter::MouseOnUi()
+                                       : InputRouter::IsCapturing();
+            if (blocked)
+                *count = buffer && itemSize >= 8
+                            ? KeepReleases(buffer, itemSize, *count, mouse)
+                            : 0;
+        }
 
         return hr;
     }
 
     HRESULT STDMETHODCALLTYPE CreateDeviceHook(void* self, const GUID& guid,
-                                               void** dispositivo, void* agg)
+                                               void** device, void* agg)
     {
-        HRESULT hr = g_origCreate(self, guid, dispositivo, agg);
-        if (SUCCEEDED(hr) && dispositivo && *dispositivo && !g_origGetState)
+        HRESULT hr = g_origCreate(self, guid, device, agg);
+        if (SUCCEEDED(hr) && device && *device &&
+            memcmp(&guid, &GUID_SysMouse_, sizeof(GUID)) == 0)
         {
-            // Teclado e mouse compartilham a mesma vtable, entao um hook cobre
-            // os dois; a filtragem e feita por tipo de leitura, nao por
-            // dispositivo.
-            g_origGetState = (tGetDeviceState)HookVTable(*dispositivo,
+            g_mouseDevice = *device;
+            LogTag("in  ", "mouse device is 0x%p", *device);
+        }
+        if (SUCCEEDED(hr) && device && *device && !g_origGetState)
+        {
+            // Keyboard and mouse share the same vtable, so one hook covers
+            // both; the filtering is done by kind of read, not by
+            // device.
+            g_origGetState = (tGetDeviceState)HookVTable(*device,
                                                          VT_GET_DEVICE_STATE,
                                                          (void*)GetDeviceStateHook);
-            g_origGetData = (tGetDeviceData)HookVTable(*dispositivo,
+            g_origGetData = (tGetDeviceData)HookVTable(*device,
                                                        VT_GET_DEVICE_DATA,
                                                        (void*)GetDeviceDataHook);
             LogTag("in  ", "keyboard reads wrapped (state + buffered) on 0x%p",
-                   *dispositivo);
+                   *device);
         }
         return hr;
     }
 
-    HRESULT WINAPI DirectInput8CreateHook(HINSTANCE inst, DWORD versao,
-                                          const IID& iid, void** saida, void* agg)
+    HRESULT WINAPI DirectInput8CreateHook(HINSTANCE inst, DWORD version,
+                                          const IID& iid, void** out, void* agg)
     {
-        HRESULT hr = g_origCreateDI(inst, versao, iid, saida, agg);
-        if (SUCCEEDED(hr) && saida && *saida && !g_origCreate)
+        HRESULT hr = g_origCreateDI(inst, version, iid, out, agg);
+        if (SUCCEEDED(hr) && out && *out && !g_origCreate)
         {
-            g_origCreate = (tCreateDevice)HookVTable(*saida, VT_CREATE_DEVICE,
+            g_origCreate = (tCreateDevice)HookVTable(*out, VT_CREATE_DEVICE,
                                                      (void*)CreateDeviceHook);
-            LogTag("in  ", "DirectInput wrapped (0x%p)", *saida);
+            LogTag("in  ", "DirectInput wrapped (0x%p)", *out);
         }
         return hr;
     }
@@ -128,23 +184,23 @@ namespace DInputBlock
             const char* dll = (const char*)((BYTE*)base + imp->Name);
             if (_stricmp(dll, "dinput8.dll") != 0) continue;
 
-            IMAGE_THUNK_DATA* nomes = (IMAGE_THUNK_DATA*)((BYTE*)base + imp->OriginalFirstThunk);
-            IMAGE_THUNK_DATA* enderecos = (IMAGE_THUNK_DATA*)((BYTE*)base + imp->FirstThunk);
+            IMAGE_THUNK_DATA* names = (IMAGE_THUNK_DATA*)((BYTE*)base + imp->OriginalFirstThunk);
+            IMAGE_THUNK_DATA* addresses = (IMAGE_THUNK_DATA*)((BYTE*)base + imp->FirstThunk);
 
-            for (; nomes->u1.AddressOfData; nomes++, enderecos++)
+            for (; names->u1.AddressOfData; names++, addresses++)
             {
-                if (IMAGE_SNAP_BY_ORDINAL(nomes->u1.Ordinal)) continue;
+                if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)) continue;
 
-                IMAGE_IMPORT_BY_NAME* nome =
-                    (IMAGE_IMPORT_BY_NAME*)((BYTE*)base + nomes->u1.AddressOfData);
-                if (strcmp((const char*)nome->Name, "DirectInput8Create") != 0) continue;
+                IMAGE_IMPORT_BY_NAME* name =
+                    (IMAGE_IMPORT_BY_NAME*)((BYTE*)base + names->u1.AddressOfData);
+                if (strcmp((const char*)name->Name, "DirectInput8Create") != 0) continue;
 
                 DWORD old;
-                VirtualProtect(&enderecos->u1.Function, sizeof(void*),
+                VirtualProtect(&addresses->u1.Function, sizeof(void*),
                                PAGE_READWRITE, &old);
-                g_origCreateDI = (tDirectInput8Create)enderecos->u1.Function;
-                enderecos->u1.Function = (DWORD_PTR)DirectInput8CreateHook;
-                VirtualProtect(&enderecos->u1.Function, sizeof(void*), old, &old);
+                g_origCreateDI = (tDirectInput8Create)addresses->u1.Function;
+                addresses->u1.Function = (DWORD_PTR)DirectInput8CreateHook;
+                VirtualProtect(&addresses->u1.Function, sizeof(void*), old, &old);
 
                 LogTag("in  ", "DirectInput8Create wrapped in the import table");
                 return;

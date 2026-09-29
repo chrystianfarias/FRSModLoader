@@ -11,8 +11,9 @@ namespace
     HWND    g_hwnd = 0;
     bool    g_capturing = false;
     bool    g_mouse = true;          // with the keyboard, the mouse too
-    bool    g_cursorShown = false;
     bool    g_commandAsked = false;  // a "/" was typed; see TakeCommandRequest
+    bool    g_overUi = false;        // the pointer is over something the page drew
+    int     g_uiButtons = 0;         // buttons pressed on the page, still down
     int     g_toggleKey = VK_F1;
 
     // Circular key queue for mods. Sixteen is plenty: the main loop drains it
@@ -49,6 +50,76 @@ namespace
         *y = cy;
     }
 
+    // The page draws over the whole screen, mostly transparent. Where it drew
+    // something the mouse is the page's; where the game shows through, the
+    // game's. Faint pixels (a panel's shadow fading out) count as the game.
+    bool OverUi(int x, int y)
+    {
+        return Overlay::IsVisible() && CefHost::AlphaAt(x, y) >= 16;
+    }
+
+    // Whether the page takes a mouse event at (x, y): every one while the UI
+    // holds the mouse (F1); otherwise the ones over the page, and the rest of
+    // a press that started on it.
+    bool UiTakesMouse(int x, int y)
+    {
+        return (g_capturing && g_mouse) || g_uiButtons || OverUi(x, y);
+    }
+
+    // Mouse messages, in either mode. Returns true when the page took it.
+    bool RouteMouse(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        int x, y;
+        switch (msg)
+        {
+        case WM_MOUSEMOVE:
+            // Every move reaches the page, so hover comes and goes as it
+            // should; the game reads the pointer with GetCursorPos anyway.
+            ToUiCoords(lParam, &x, &y);
+            g_overUi = OverUi(x, y);
+            CefHost::MouseMove(x, y, (wParam & MK_LBUTTON) != 0);
+            return g_capturing && g_mouse;
+
+        case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+        case WM_RBUTTONDOWN: case WM_RBUTTONUP:
+        case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+        {
+            ToUiCoords(lParam, &x, &y);
+            const int button = (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP) ? 1
+                             : (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP) ? 2 : 0;
+            const bool down = (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN ||
+                               msg == WM_MBUTTONDOWN);
+            // A release belongs to whoever got the press.
+            const bool mine = down ? UiTakesMouse(x, y)
+                                   : (g_uiButtons & (1 << button)) || (g_capturing && g_mouse);
+            if (!mine) return false;
+
+            if (down) g_uiButtons |= 1 << button;
+            else      g_uiButtons &= ~(1 << button);
+            if (down) SetCapture(hwnd);
+            else if (!g_uiButtons) ReleaseCapture();
+            CefHost::MouseButton(x, y, button, down, 1);
+            return true;
+        }
+
+        case WM_MOUSEWHEEL:
+        {
+            POINT p = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            ScreenToClient(hwnd, &p);
+            ToUiCoords(MAKELPARAM(p.x, p.y), &x, &y);
+            if (!UiTakesMouse(x, y)) return false;
+            CefHost::MouseWheel(x, y, GET_WHEEL_DELTA_WPARAM(wParam));
+            return true;
+        }
+
+        case WM_MOUSELEAVE:
+            g_overUi = false;
+            CefHost::MouseLeave();
+            return g_capturing && g_mouse;
+        }
+        return false;
+    }
+
     LRESULT CALLBACK WndProcHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         // WM_SYSKEYDOWN counts as a key press too. Windows sends F10 and
@@ -80,63 +151,27 @@ namespace
         // the window menu and the game loses focus mid-race.
         if (msg == WM_SYSKEYDOWN && (int)wParam == VK_F10) return 0;
 
-        if (g_capturing && !g_mouse)
+        // No Windows arrow over the game, UI or not: the pointer is the
+        // game's own, drawn above the page by Cursor.
+        if (msg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT)
         {
-            switch (msg)
-            {
-            case WM_KEYDOWN: case WM_KEYUP:
-            case WM_SYSKEYDOWN: case WM_SYSKEYUP:
-            case WM_CHAR: case WM_SYSCHAR:
-                CefHost::Key(msg, wParam, lParam);
-                return 0;
-            }
+            SetCursor(NULL);
+            return TRUE;
         }
-        else if (g_capturing)
+
+        // The mouse needs no F1: the page gets what lands on it.
+        if (RouteMouse(hwnd, msg, wParam, lParam)) return 0;
+
+        // The keyboard does: F1 (or a mod asking for it) hands it over.
+        if (g_capturing)
         {
-            int x, y;
             switch (msg)
             {
-            case WM_MOUSEMOVE:
-                ToUiCoords(lParam, &x, &y);
-                CefHost::MouseMove(x, y, (wParam & MK_LBUTTON) != 0);
-                return 0;
-
-            case WM_LBUTTONDOWN: case WM_LBUTTONUP:
-            case WM_RBUTTONDOWN: case WM_RBUTTONUP:
-            case WM_MBUTTONDOWN: case WM_MBUTTONUP:
-            {
-                ToUiCoords(lParam, &x, &y);
-                int button = (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP) ? 1
-                           : (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP) ? 2 : 0;
-                bool down = (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN ||
-                             msg == WM_MBUTTONDOWN);
-                if (down) SetCapture(hwnd); else ReleaseCapture();
-                CefHost::MouseButton(x, y, button, down, 1);
-                return 0;
-            }
-
-            case WM_MOUSEWHEEL:
-            {
-                POINT p = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-                ScreenToClient(hwnd, &p);
-                ToUiCoords(MAKELPARAM(p.x, p.y), &x, &y);
-                CefHost::MouseWheel(x, y, GET_WHEEL_DELTA_WPARAM(wParam));
-                return 0;
-            }
-
-            case WM_MOUSELEAVE:
-                CefHost::MouseLeave();
-                return 0;
-
             case WM_KEYDOWN: case WM_KEYUP:
             case WM_SYSKEYDOWN: case WM_SYSKEYUP:
             case WM_CHAR: case WM_SYSCHAR:
                 CefHost::Key(msg, wParam, lParam);
                 return 0;
-
-            case WM_SETCURSOR:
-                SetCursor(LoadCursor(NULL, IDC_ARROW));
-                return TRUE;
             }
         }
 
@@ -156,7 +191,22 @@ namespace InputRouter
 
     void Update()
     {
-        if (g_origWndProc) return;
+        if (g_origWndProc)
+        {
+            // The page changes under a mouse that stands still too: a panel
+            // opening under the pointer has to take the next click.
+            POINT p;
+            RECT rc;
+            if (GetCursorPos(&p) && ScreenToClient(g_hwnd, &p) &&
+                GetClientRect(g_hwnd, &rc) && PtInRect(&rc, p))
+            {
+                int x, y;
+                ToUiCoords(MAKELPARAM(p.x, p.y), &x, &y);
+                g_overUi = OverUi(x, y);
+            }
+            else g_overUi = false;
+            return;
+        }
 
         HWND hwnd = Game::Window();
         if (!hwnd || !IsWindow(hwnd)) return;
@@ -176,6 +226,8 @@ namespace InputRouter
     }
 
     bool IsCapturing() { return g_capturing; }
+    bool IsCapturingMouse() { return g_capturing && g_mouse; }
+    bool MouseOnUi() { return (g_capturing && g_mouse) || g_uiButtons || g_overUi; }
 
     bool TakeCommandRequest()
     {
@@ -200,21 +252,12 @@ namespace InputRouter
         g_mouse = mouse;
 
         CefHost::SetFocus(capturing);
-        // The game hides the cursor; with the UI taking the mouse it has to
-        // come back, and go again when the mouse returns to the game.
-        const bool wantCursor = capturing && mouse;
-        if (wantCursor && !g_cursorShown)
+        // Windows' cursor stays as the game left it, hidden. The one the UI
+        // shows is the game's own, drawn over the page (see Cursor).
+        const bool wantMouse = capturing && mouse;
+        if (wasMouse && !wantMouse)
         {
-            while (ShowCursor(TRUE) < 0) {}
-            g_cursorShown = true;
-        }
-        else if (!wantCursor && g_cursorShown)
-        {
-            ShowCursor(FALSE);
-            g_cursorShown = false;
-        }
-        if (wasMouse && !wantCursor)
-        {
+            g_uiButtons = 0;
             ReleaseCapture();
             CefHost::MouseLeave();
         }
