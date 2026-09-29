@@ -1,13 +1,13 @@
-// speed.command e speed.print - o console do jogo.
+// speed.command and speed.print - the game's console.
 //
-// Duas metades da mesma coisa: os mods escrevem linhas com speed.print e o
-// jogador responde com /comandos. A barra e o historico vivem na casca da UI;
-// aqui ficam o registro dos comandos e o caminho ate ela.
+// Two halves of the same thing: mods write lines with speed.print and the
+// player answers with /commands. The bar and the history live in the UI shell;
+// what lives here is the command registry and the path to it.
 //
-// As linhas aceitam cor por marcacao: "gastou {laranja}12.4 L{/} de
-// {amarelo}alcool{/}". A cor e escolhida na hora de escrever a linha, por quem
-// sabe o que e importante nela — um log todo de uma cor so vira parede de
-// texto, e numeros sao o que se procura num console durante uma corrida.
+// Lines accept colour through markup: "burned {orange}12.4 L{/} of
+// {yellow}ethanol{/}". The colour is picked when the line is written, by whoever
+// knows what matters in it — a log all in one colour turns into a wall of
+// text, and numbers are what you look for in a console during a race.
 //
 // speed.command - slash commands, typed over the game.
 //
@@ -62,7 +62,7 @@ namespace
         return out;
     }
 
-    // speed.print("texto {verde}colorido{/}")
+    // speed.print("text {green}coloured{/}")
     JSValue Print(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
         if (argc < 1) return JS_UNDEFINED;
@@ -72,7 +72,7 @@ namespace
 
         Js::Mod* mod = Js::Owner(ctx);
 
-        // Encapsula como JSON para aspas e acentos atravessarem inteiros.
+        // Wrapped as JSON so quotes and accents make it across intact.
         JSValue payload = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, payload, "mod",
                           JS_NewString(ctx, mod ? mod->id.c_str() : "sl"));
@@ -144,7 +144,7 @@ namespace Js
         std::string name = Lower(parts[0]);
         if (name == "help" || name == "ajuda" || name == "?")
         {
-            std::string out = "comandos: ";
+            std::string out = "commands: ";
             bool first = true;
             for (const auto& kv : g_commands)
             {
@@ -152,7 +152,7 @@ namespace Js
                 first = false;
                 out += "/" + kv.first;
             }
-            if (first) out = "nenhum comando registrado";
+            if (first) out = "no commands registered";
             CefHost::SendToUi("sl:command-reply", "\"" + out + "\"");
             return;
         }
@@ -161,7 +161,7 @@ namespace Js
         if (it == g_commands.end())
         {
             CefHost::SendToUi("sl:command-reply",
-                              "\"comando desconhecido: /" + name + "\"");
+                              "\"unknown command: /" + name + "\"");
             return;
         }
 
@@ -179,7 +179,7 @@ namespace Js
         if (JS_IsException(r))
         {
             ReportException(ctx, "command");
-            CefHost::SendToUi("sl:command-reply", "\"/" + name + " falhou\"");
+            CefHost::SendToUi("sl:command-reply", "\"/" + name + " failed\"");
         }
         else if (!JS_IsUndefined(r) && !JS_IsNull(r))
         {

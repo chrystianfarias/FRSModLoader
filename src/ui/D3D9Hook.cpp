@@ -52,15 +52,16 @@ namespace
             LogGfx("EndScene alive: %llu frames", frames);
         }
 
-        // As particulas do mundo vao ANTES da interface: elas sao parte da
-        // cena, com profundidade e perspectiva, enquanto o overlay e plano e
-        // cobre tudo. Desenhar depois faria a chama aparecer por cima do HUD.
+        // The world's particles go BEFORE the interface: they are part of the
+        // scene, with depth and perspective, while the overlay is flat and
+        // covers everything. Drawing them afterwards would put the flame over
+        // the HUD.
         {
-            static DWORD anterior = 0;
-            DWORD agora = GetTickCount();
-            float dt = anterior ? (agora - anterior) / 1000.0f : 0.0f;
-            anterior = agora;
-            if (dt > 0.25f) dt = 0.25f;   // uma pausa longa nao mata as particulas
+            static DWORD previous = 0;
+            DWORD current = GetTickCount();
+            float dt = previous ? (current - previous) / 1000.0f : 0.0f;
+            previous = current;
+            if (dt > 0.25f) dt = 0.25f;   // a long pause does not kill the particles
             WorldDraw::Render(device, dt);
         }
 

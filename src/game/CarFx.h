@@ -53,17 +53,17 @@ namespace CarFx
         if (!self) return;
         g_container = self;
 
-        // Registra as primeiras capturas com o valor cru da contagem: se o
-        // loader roda mas a contagem sai absurda, o `esi` daqui nao e o
-        // container que eu presumi — e sem este log os dois casos sao
-        // indistinguiveis de "nao carregou nada".
-        static int vistas = 0;
-        if (vistas < 5)
+        // Logs the first captures with the raw count: if the loader runs but
+        // the count comes out absurd, the `esi` here is not the container I
+        // assumed — and without this log both cases are indistinguishable
+        // from "nothing loaded".
+        static int seen = 0;
+        if (seen < 5)
         {
-            vistas++;
+            seen++;
             int n = IsBadReadPtr((char*)self + FX_COUNT, 4)
                   ? -1 : *(int*)((char*)self + FX_COUNT);
-            Log("carfx: loader em 0x%p, contagem crua = %d", self, n);
+            Log("carfx: loader at 0x%p, raw count = %d", self, n);
         }
     }
 

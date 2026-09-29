@@ -153,20 +153,21 @@ namespace EngineControl
         bool shifting = g_holdOnShift && GetTickCount() < g_shiftUntil
                      && g_lastRealThrottle > 0.5f;
 
-        // E a largada, que precisa de um terceiro caso proprio.
+        // And the launch, which needs a third case of its own.
         //
-        // Segurando o botao, a troca de N para 1 abria uma janela sem ninguem
-        // segurando a pressao: a rotacao cede, o nosso corte se apaga, e a
-        // deteccao de troca do lado do mod depende de ler o acelerador — que
-        // durante o corte le baixo, entao ela nem acontece. A pressao escapava
-        // exatamente ai, e a largada saia fraca.
+        // With the button held, the shift from N to 1 opened a window with
+        // nobody holding the pressure: the revs drop, our cut goes off, and
+        // the mod's shift detection depends on reading the throttle — which
+        // reads low during the cut, so it never even happens. The pressure
+        // leaked out right there, and the launch came out weak.
         //
-        // Enquanto o botao esta apertado o motorista esta explicitamente
-        // enchendo o turbo, e a marcha em que o cambio esta nao muda isso. Nao
-        // depende de corte nem de troca detectada, que era a fragilidade.
-        bool largando = g_engaged;
+        // While the button is pressed the driver is explicitly spooling the
+        // turbo, and whichever gear the gearbox is in does not change that. It
+        // depends neither on the cut nor on a detected shift, which was the
+        // weak spot.
+        bool launching = g_engaged;
 
-        if (!cutting && !shifting && !largando) return;
+        if (!cutting && !shifting && !launching) return;
 
         g_turboEngine = engine;
         DWORD* gas = (DWORD*)((char*)engine + ENGINE_THROTTLE);

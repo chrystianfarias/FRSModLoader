@@ -48,10 +48,10 @@ namespace
     JSValue Player(JSContext* ctx, JSValueConst, int, JSValueConst*)
     { return Ptr(ctx, Game::Player()); }
 
-    // O carro da carreira em uso. Zero quando nao ha nenhum.
-    // A ficha do carro na garagem. E onde moram os dados persistentes do
-    // veiculo da carreira — pecas instaladas incluidas —, entao expo-la e o que
-    // permite ao mod investigar upgrades sem outro achado em C++.
+    // The career car in use. Zero when there is none.
+    // The car's record in the garage. It is where the career vehicle's
+    // persistent data lives — installed parts included —, so exposing it is
+    // what lets a mod investigate upgrades without another find in C++.
     JSValue CarEntryJs(JSContext* ctx, JSValueConst, int, JSValueConst*)
     {
         void* e = Game::CarEntry();
@@ -64,8 +64,8 @@ namespace
         return id ? JS_NewInt32(ctx, id) : JS_NULL;
     }
 
-    // O nome do modelo, pela busca do proprio jogo.
-    // As regras de efeito do carro, como o jogo as carregou.
+    // The model name, through the game's own lookup.
+    // The car's effect rules, as the game loaded them.
     JSValue FxRules(JSContext* ctx, JSValueConst, int, JSValueConst*)
     {
         JSValue arr = JS_NewArray(ctx);
@@ -88,8 +88,8 @@ namespace
 
     JSValue CarModel(JSContext* ctx, JSValueConst, int, JSValueConst*)
     {
-        const char* nome = Game::CarModel();
-        return nome ? JS_NewString(ctx, nome) : JS_NULL;
+        const char* name = Game::CarModel();
+        return name ? JS_NewString(ctx, name) : JS_NULL;
     }
 
     JSValue Car(JSContext* ctx, JSValueConst, int, JSValueConst*)

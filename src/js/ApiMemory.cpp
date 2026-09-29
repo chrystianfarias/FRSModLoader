@@ -470,49 +470,49 @@ namespace
 
 namespace
 {
-    // Varredura de memoria, para caca de estruturas.
+    // Memory scanning, for hunting down structures.
     //
-    // O fluxo e o classico: procura-se um valor conhecido (dinheiro, por
-    // exemplo), muda-se ele no jogo e refina-se a lista. O que sobra e o campo.
-    // Sem isto, achar uma estrutura de save vira adivinhacao — e este projeto
-    // ja gastou rodadas demais adivinhando.
+    // The workflow is the classic one: search for a known value (money, for
+    // example), change it in the game and narrow the list down. What is left
+    // is the field. Without this, finding a save structure turns into
+    // guesswork — and this project has already spent too many rounds guessing.
     //
-    // A varredura anda so por regioes confirmadas e graváveis: o resto e
-    // codigo, e um save nao mora la.
+    // The scan only walks committed, writable regions: the rest is code, and
+    // a save does not live there.
     std::vector<uintptr_t> g_hits;
 
-    // Leitura protegida. Precisa ficar em funcao propria e sem nenhum objeto
-    // C++ por perto: o compilador recusa __try onde existe desenrolamento de
-    // pilha (C2712), e um std::vector local ja basta para isso.
-    bool LerInt(uintptr_t a, int32_t* saida)
+    // Protected read. It has to live in a function of its own with no C++
+    // object anywhere near it: the compiler refuses __try where there is stack
+    // unwinding (C2712), and a local std::vector is already enough for that.
+    bool ReadInt(uintptr_t a, int32_t* out)
     {
-        __try { *saida = *(int32_t*)a; return true; }
+        __try { *out = *(int32_t*)a; return true; }
         __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
-    // Varre uma regiao para um vetor cru. A regiao pode sumir no meio da
-    // varredura — outra thread liberando memoria — e antes disso derrubava o
-    // jogo.
-    size_t VarrerRegiao(uintptr_t base, size_t tam, int32_t alvo,
-                        uintptr_t* saida, size_t maxSaida)
+    // Scans a region into a raw array. The region can vanish in the middle of
+    // the scan — another thread freeing memory — and before this it took the
+    // game down.
+    size_t ScanRegion(uintptr_t base, size_t size, int32_t target,
+                      uintptr_t* out, size_t maxOut)
     {
         size_t n = 0;
         __try
         {
-            for (size_t off = 0; off + 4 <= tam && n < maxSaida; off += 4)
-                if (*(int32_t*)(base + off) == alvo) saida[n++] = base + off;
+            for (size_t off = 0; off + 4 <= size && n < maxOut; off += 4)
+                if (*(int32_t*)(base + off) == target) out[n++] = base + off;
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
         return n;
     }
 
-    size_t RetratarRegiao(uintptr_t base, uintptr_t fim,
-                          uintptr_t* addrs, int32_t* vals, size_t maxSaida)
+    size_t SnapshotRegion(uintptr_t base, uintptr_t end,
+                          uintptr_t* addrs, int32_t* vals, size_t maxOut)
     {
         size_t n = 0;
         __try
         {
-            for (uintptr_t a = base; a + 4 <= fim && n < maxSaida; a += 4)
+            for (uintptr_t a = base; a + 4 <= end && n < maxOut; a += 4)
             {
                 addrs[n] = a;
                 vals[n] = *(int32_t*)a;
@@ -523,25 +523,25 @@ namespace
         return n;
     }
 
-    bool RegiaoInteressante(const MEMORY_BASIC_INFORMATION& mbi)
+    bool InterestingRegion(const MEMORY_BASIC_INFORMATION& mbi)
     {
         if (mbi.State != MEM_COMMIT) return false;
         if (mbi.Protect & PAGE_GUARD) return false;
 
-        DWORD grav = PAGE_READWRITE | PAGE_WRITECOPY
-                   | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-        return (mbi.Protect & grav) != 0;
+        DWORD writable = PAGE_READWRITE | PAGE_WRITECOPY
+                       | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+        return (mbi.Protect & writable) != 0;
     }
 
     JSValue Scan(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
         if (argc < 1) return JS_ThrowTypeError(ctx, "speed.mem.scan(value, max?)");
 
-        int32_t alvo = 0;
-        if (JS_ToInt32(ctx, &alvo, argv[0])) return JS_EXCEPTION;
+        int32_t target = 0;
+        if (JS_ToInt32(ctx, &target, argv[0])) return JS_EXCEPTION;
 
-        int32_t maximo = 4096;
-        if (argc >= 2) JS_ToInt32(ctx, &maximo, argv[1]);
+        int32_t maxHits = 4096;
+        if (argc >= 2) JS_ToInt32(ctx, &maxHits, argv[1]);
 
         g_hits.clear();
 
@@ -549,31 +549,31 @@ namespace
         GetSystemInfo(&si);
 
         uintptr_t p = (uintptr_t)si.lpMinimumApplicationAddress;
-        uintptr_t fim = (uintptr_t)si.lpMaximumApplicationAddress;
+        uintptr_t end = (uintptr_t)si.lpMaximumApplicationAddress;
 
-        while (p < fim && (int)g_hits.size() < maximo)
+        while (p < end && (int)g_hits.size() < maxHits)
         {
             MEMORY_BASIC_INFORMATION mbi;
             if (!VirtualQuery((void*)p, &mbi, sizeof(mbi))) break;
 
-            if (RegiaoInteressante(mbi))
+            if (InterestingRegion(mbi))
             {
                 uintptr_t base = (uintptr_t)mbi.BaseAddress;
-                size_t tam = mbi.RegionSize;
+                size_t size = mbi.RegionSize;
 
-                // Protegido por SEH: a varredura le memoria viva, e outra
-                // thread pode liberar uma regiao no meio do caminho. Sem isto o
-                // jogo caia — e nao na hora da leitura errada, mas na proxima
-                // varredura, o que e pior de diagnosticar.
+                // Guarded by SEH: the scan reads live memory, and another
+                // thread can free a region halfway through. Without this the
+                // game crashed — and not at the bad read, but on the next
+                // scan, which is worse to diagnose.
                 //
-                // Alinhado em 4: um inteiro nao fica desalinhado, e varrer byte
-                // a byte multiplicaria o custo por quatro.
-                size_t cabe = (size_t)maximo - g_hits.size();
-                if (cabe)
+                // Aligned to 4: an int is never misaligned, and scanning byte
+                // by byte would multiply the cost by four.
+                size_t room = (size_t)maxHits - g_hits.size();
+                if (room)
                 {
-                    std::vector<uintptr_t> achados(cabe);
-                    size_t n = VarrerRegiao(base, tam, alvo, achados.data(), cabe);
-                    g_hits.insert(g_hits.end(), achados.begin(), achados.begin() + n);
+                    std::vector<uintptr_t> found(room);
+                    size_t n = ScanRegion(base, size, target, found.data(), room);
+                    g_hits.insert(g_hits.end(), found.begin(), found.begin() + n);
                 }
             }
 
@@ -583,81 +583,81 @@ namespace
         return JS_NewInt32(ctx, (int32_t)g_hits.size());
     }
 
-    // Segunda passada: fica so com os enderecos que agora valem o novo numero.
+    // Second pass: keeps only the addresses that now hold the new number.
     JSValue ScanNext(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
         if (argc < 1) return JS_ThrowTypeError(ctx, "speed.mem.scanNext(value)");
 
-        int32_t alvo = 0;
-        if (JS_ToInt32(ctx, &alvo, argv[0])) return JS_EXCEPTION;
+        int32_t target = 0;
+        if (JS_ToInt32(ctx, &target, argv[0])) return JS_EXCEPTION;
 
-        std::vector<uintptr_t> restantes;
+        std::vector<uintptr_t> remaining;
         for (uintptr_t a : g_hits)
         {
             if (IsBadReadPtr((void*)a, 4)) continue;
             int32_t v = 0;
-            if (LerInt(a, &v) && v == alvo) restantes.push_back(a);
+            if (ReadInt(a, &v) && v == target) remaining.push_back(a);
         }
-        g_hits.swap(restantes);
+        g_hits.swap(remaining);
         return JS_NewInt32(ctx, (int32_t)g_hits.size());
     }
 
-    // Busca por valor DESCONHECIDO: tira um retrato e depois filtra pelo que
-    // mudou (ou pelo que ficou igual).
+    // Search for an UNKNOWN value: take a snapshot, then filter by what
+    // changed (or by what stayed the same).
     //
-    // E o que resolve quando nao se sabe o numero procurado — no caso do indice
-    // do carro, nao se sabe nem se ele comeca em zero. Basta trocar de carro
-    // entre o retrato e o filtro.
+    // This is what works when the number you are after is unknown — for the
+    // car index, nobody even knows whether it starts at zero. Just switch cars
+    // between the snapshot and the filter.
     //
-    // O retrato cobre so a faixa dos globais do modulo (uns poucos MB), e nao a
-    // memoria toda: e la que vive o estado de carreira, e copiar centenas de
-    // megabytes por curiosidade seria caro sem motivo.
+    // The snapshot only covers the module's globals range (a few MB), not the
+    // whole memory: that is where the career state lives, and copying hundreds
+    // of megabytes out of curiosity would be expensive for no reason.
     std::vector<uintptr_t> g_snapAddrs;
     std::vector<int32_t>   g_snapVals;
 
     JSValue ScanSnapshot(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
-        uintptr_t base = 0x400000, fim = 0x900000;
+        uintptr_t base = 0x400000, end = 0x900000;
         if (argc >= 1) { int32_t v = 0; JS_ToInt32(ctx, &v, argv[0]); base = (uintptr_t)v; }
-        if (argc >= 2) { int32_t v = 0; JS_ToInt32(ctx, &v, argv[1]); fim = base + (uintptr_t)v; }
+        if (argc >= 2) { int32_t v = 0; JS_ToInt32(ctx, &v, argv[1]); end = base + (uintptr_t)v; }
 
         g_snapAddrs.clear();
         g_snapVals.clear();
 
         uintptr_t p = base;
-        while (p < fim)
+        while (p < end)
         {
             MEMORY_BASIC_INFORMATION mbi;
             if (!VirtualQuery((void*)p, &mbi, sizeof(mbi))) break;
 
             uintptr_t regBase = (uintptr_t)mbi.BaseAddress;
-            uintptr_t regFim = regBase + mbi.RegionSize;
-            if (RegiaoInteressante(mbi))
+            uintptr_t regEnd = regBase + mbi.RegionSize;
+            if (InterestingRegion(mbi))
             {
                 uintptr_t a = regBase < base ? base : regBase;
-                uintptr_t b = regFim > fim ? fim : regFim;
-                size_t cabe = (b > a) ? (size_t)((b - a) / 4) : 0;
-                if (cabe)
+                uintptr_t b = regEnd > end ? end : regEnd;
+                size_t room = (b > a) ? (size_t)((b - a) / 4) : 0;
+                if (room)
                 {
-                    std::vector<uintptr_t> addrs(cabe);
-                    std::vector<int32_t> vals(cabe);
-                    size_t n = RetratarRegiao(a, b, addrs.data(), vals.data(), cabe);
+                    std::vector<uintptr_t> addrs(room);
+                    std::vector<int32_t> vals(room);
+                    size_t n = SnapshotRegion(a, b, addrs.data(), vals.data(), room);
                     g_snapAddrs.insert(g_snapAddrs.end(), addrs.begin(), addrs.begin() + n);
                     g_snapVals.insert(g_snapVals.end(), vals.begin(), vals.begin() + n);
                 }
             }
-            p = regFim;
+            p = regEnd;
         }
 
         g_hits.clear();
         return JS_NewInt32(ctx, (int32_t)g_snapAddrs.size());
     }
 
-    // mudou = true  -> fica com quem mudou desde o retrato
-    // mudou = false -> fica com quem continua igual
+    // changed = true  -> keeps whatever changed since the snapshot
+    // changed = false -> keeps whatever stayed the same
     JSValue ScanDiff(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
-        bool mudou = argc < 1 || JS_ToBool(ctx, argv[0]) == 1;
+        bool changed = argc < 1 || JS_ToBool(ctx, argv[0]) == 1;
 
         std::vector<uintptr_t> addrs;
         std::vector<int32_t>   vals;
@@ -667,12 +667,12 @@ namespace
             uintptr_t a = g_snapAddrs[i];
             if (IsBadReadPtr((void*)a, 4)) continue;
 
-            int32_t agora = 0;
-            if (!LerInt(a, &agora)) continue;
-            if ((agora != g_snapVals[i]) != mudou) continue;
+            int32_t now = 0;
+            if (!ReadInt(a, &now)) continue;
+            if ((now != g_snapVals[i]) != changed) continue;
 
             addrs.push_back(a);
-            vals.push_back(agora);
+            vals.push_back(now);
         }
 
         g_snapAddrs.swap(addrs);
@@ -683,11 +683,11 @@ namespace
 
     JSValue ScanResults(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
     {
-        int32_t limite = 32;
-        if (argc >= 1) JS_ToInt32(ctx, &limite, argv[0]);
+        int32_t limit = 32;
+        if (argc >= 1) JS_ToInt32(ctx, &limit, argv[0]);
 
         JSValue arr = JS_NewArray(ctx);
-        for (size_t i = 0; i < g_hits.size() && (int)i < limite; i++)
+        for (size_t i = 0; i < g_hits.size() && (int)i < limit; i++)
             JS_SetPropertyUint32(ctx, arr, (uint32_t)i,
                                  JS_NewInt64(ctx, (int64_t)g_hits[i]));
         return arr;

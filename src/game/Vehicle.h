@@ -85,47 +85,49 @@ namespace Vehicle
     #define CARFX_EXHAUST_BLOWOFF 12
     #define CARFX_NOS_BLOWOFF     13
 
-    // ---------------------------------------------------------- Geometria
+    // ---------------------------------------------------------- Geometry
     //
-    // Tudo abaixo foi medido dentro do jogo, com um cubo desenhado na cena, e
-    // custou caro o bastante para merecer ficar escrito.
+    // Everything below was measured inside the game, with a cube drawn in the
+    // scene, and cost enough to be worth writing down.
     //
-    // O MUNDO e Z PARA CIMA: um carro parado fica com x,y na casa das centenas
-    // e z na casa das dezenas (a altura do terreno).
+    // The WORLD is Z UP: a parked car has x,y in the hundreds and z in the
+    // tens (the terrain height).
     //
-    // A POSE do carro (physics+0x20) traz a posicao em +0x20 e a rotacao em
-    // +0x30, tres linhas de quatro floats. As LINHAS sao os eixos do carro no
-    // mundo, entao um ponto local vira mundo multiplicando pelas COLUNAS:
+    // The car's POSE (physics+0x20) holds the position at +0x20 and the
+    // rotation at +0x30, three rows of four floats. The ROWS are the car's axes
+    // in the world, so a local point becomes world by multiplying by the
+    // COLUMNS:
     //
-    //     mundo.x = pos.x + lx*m[0] + ly*m[4] + lz*m[8]
+    //     world.x = pos.x + lx*m[0] + ly*m[4] + lz*m[8]
     //
-    // A transposta tambem preserva distancias e por isso NENHUMA medicao
-    // numerica separa as duas; o que separa e desenhar as duas na tela — com a
-    // errada o ponto fica espelhado e so parece certo de alguns angulos.
+    // The transpose also preserves distances, so NO numeric measurement tells
+    // the two apart; what does is drawing both on screen — with the wrong one
+    // the point is mirrored and only looks right from some angles.
     //
-    // A posicao da pose e a da FISICA (centro de massa), que NAO e a origem do
-    // modelo — e os marcadores do modelo sao medidos a partir desta ultima. A
-    // diferenca esta em pose+0x1F0, como (frente, lado, altura) nos eixos do
-    // carro: da 0.300 num carro e 0.220 em outro, e o componente lateral e
-    // sempre zero, porque o centro de massa cai no plano de simetria.
+    // The pose position is the PHYSICS one (centre of mass), which is NOT the
+    // model origin — and the model's markers are measured from the latter. The
+    // difference is at pose+0x1F0, as (forward, side, height) in the car's
+    // axes: it gives 0.300 on one car and 0.220 on another, and the side
+    // component is always zero, because the centre of mass sits on the plane
+    // of symmetry.
     #define POSE             0x20
     #define POSE_POSITION    0x20
     #define POSE_ROTATION    0x30
     #define POSE_MODEL_ORIGIN 0x1F0
 
-    // Os marcadores do modelo (o LEFT_EXHAUST e companhia) ficam numa lista em
-    // carfx+0x598, montada pelo jogo — ela ja reflete o para-choque EQUIPADO,
-    // que e o que dispensa mapear posicao de escape por kit.
+    // The model's markers (LEFT_EXHAUST and friends) sit in a list at
+    // carfx+0x598, built by the game — it already reflects the EQUIPPED
+    // bumper, which is what spares us from mapping exhaust positions per kit.
     //
-    // A lista e circular e cada no tem 20 bytes:
+    // The list is circular and each node is 20 bytes:
     //
-    //     +0x00  proximo (volta a cabeca no ultimo)
-    //     +0x04  x, y, z   em coordenadas do MODELO
-    //     +0x10  ponteiro para a orientacao do marcador
+    //     +0x00  next (wraps back to the head on the last one)
+    //     +0x04  x, y, z   in MODEL coordinates
+    //     +0x10  pointer to the marker's orientation
     //
-    // A orientacao e uma matriz 3x4 a partir de +0x10 do alvo: para o escape as
-    // linhas sao (0,0,1), (0,1,0), (-1,0,0) — o eixo Z do marcador aponta para
-    // a traseira, que e para onde o cano sopra.
+    // The orientation is a 3x4 matrix starting at +0x10 of the target: for the
+    // exhaust the rows are (0,0,1), (0,1,0), (-1,0,0) — the marker's Z axis
+    // points to the rear, which is where the pipe blows.
     #define CARFX_MARKERS    0x598
     #define MARKER_NEXT      0x00
     #define MARKER_POSITION  0x04

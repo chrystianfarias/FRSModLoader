@@ -1,6 +1,6 @@
 // speed.store - what a mod keeps between sessions.
 //
-// One JSON file per mod, in "<game>\scripts\SpeedLoader\data\<modid>.json".
+// One JSON file per mod, in "<game>\scripts\FRSModLoader\data\<modid>.json".
 //
 // The data folder sits OUTSIDE mods\ on purpose: installing a mod copies the
 // mods folder over, and a save living in there would be wiped by an update of
@@ -131,26 +131,26 @@ namespace
         return JS_UNDEFINED;
     }
 
-    // ---------------------------------------------------- por carro
+    // ---------------------------------------------------- per car
     //
-    // "Guardar algo por carro" nao e necessidade de um mod so: mapa de injecao,
-    // desgaste, preparacao — tudo isso pertence ao carro, nao ao perfil. Entao
-    // o namespace fica no SDK, e nao copiado dentro de cada mod.
+    // "Keeping something per car" is not the need of a single mod: fuel map,
+    // wear, tuning — all of that belongs to the car, not to the profile. So
+    // the namespace lives in the SDK, rather than copied inside every mod.
     //
-    // A chave e o id da carreira (Game::CarId). Sem carro carregado, get
-    // devolve o padrao e set nao grava: e melhor nao guardar do que guardar no
-    // lugar errado e misturar dois carros.
-    JSValue CarrosDe(JSContext* ctx, Js::Mod* mod)
+    // The key is the career id (Game::CarId). With no car loaded, get
+    // returns the fallback and set does not write: better not to save at all
+    // than to save in the wrong place and mix two cars up.
+    JSValue CarsOf(JSContext* ctx, Js::Mod* mod)
     {
-        JSValue raiz = Load(ctx, mod);
-        JSValue carros = JS_GetPropertyStr(ctx, raiz, "carros");
-        if (!JS_IsObject(carros))
+        JSValue root = Load(ctx, mod);
+        JSValue cars = JS_GetPropertyStr(ctx, root, "carros");
+        if (!JS_IsObject(cars))
         {
-            JS_FreeValue(ctx, carros);
-            carros = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, raiz, "carros", JS_DupValue(ctx, carros));
+            JS_FreeValue(ctx, cars);
+            cars = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, root, "carros", JS_DupValue(ctx, cars));
         }
-        return carros;
+        return cars;
     }
 
     JSValue CarGet(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
@@ -168,13 +168,13 @@ namespace
         char idStr[24];
         _snprintf(idStr, sizeof(idStr), "%d", id);
 
-        JSValue carros = CarrosDe(ctx, mod);
-        JSValue carro = JS_GetPropertyStr(ctx, carros, idStr);
-        JSValue v = JS_IsObject(carro) ? JS_GetPropertyStr(ctx, carro, key)
-                                       : JS_UNDEFINED;
+        JSValue cars = CarsOf(ctx, mod);
+        JSValue car = JS_GetPropertyStr(ctx, cars, idStr);
+        JSValue v = JS_IsObject(car) ? JS_GetPropertyStr(ctx, car, key)
+                                     : JS_UNDEFINED;
         JS_FreeCString(ctx, key);
-        JS_FreeValue(ctx, carro);
-        JS_FreeValue(ctx, carros);
+        JS_FreeValue(ctx, car);
+        JS_FreeValue(ctx, cars);
 
         if (JS_IsUndefined(v) && argc >= 2)
         {
@@ -199,19 +199,19 @@ namespace
         char idStr[24];
         _snprintf(idStr, sizeof(idStr), "%d", id);
 
-        JSValue carros = CarrosDe(ctx, mod);
-        JSValue carro = JS_GetPropertyStr(ctx, carros, idStr);
-        if (!JS_IsObject(carro))
+        JSValue cars = CarsOf(ctx, mod);
+        JSValue car = JS_GetPropertyStr(ctx, cars, idStr);
+        if (!JS_IsObject(car))
         {
-            JS_FreeValue(ctx, carro);
-            carro = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, carros, idStr, JS_DupValue(ctx, carro));
+            JS_FreeValue(ctx, car);
+            car = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, cars, idStr, JS_DupValue(ctx, car));
         }
 
-        JS_SetPropertyStr(ctx, carro, key, JS_DupValue(ctx, argv[1]));
+        JS_SetPropertyStr(ctx, car, key, JS_DupValue(ctx, argv[1]));
         JS_FreeCString(ctx, key);
-        JS_FreeValue(ctx, carro);
-        JS_FreeValue(ctx, carros);
+        JS_FreeValue(ctx, car);
+        JS_FreeValue(ctx, cars);
 
         Persist(ctx, mod, Load(ctx, mod));
         return JS_NewBool(ctx, true);
@@ -256,11 +256,11 @@ namespace Js
         JS_SetPropertyStr(ctx, store, "all",   JS_NewCFunction(ctx, All, "all", 0));
         JS_SetPropertyStr(ctx, store, "clear", JS_NewCFunction(ctx, Clear, "clear", 0));
 
-        JSValue carro = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, carro, "get", JS_NewCFunction(ctx, CarGet, "get", 2));
-        JS_SetPropertyStr(ctx, carro, "set", JS_NewCFunction(ctx, CarSet, "set", 2));
-        JS_SetPropertyStr(ctx, carro, "id",  JS_NewCFunction(ctx, CarId, "id", 0));
-        JS_SetPropertyStr(ctx, store, "car", carro);
+        JSValue car = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, car, "get", JS_NewCFunction(ctx, CarGet, "get", 2));
+        JS_SetPropertyStr(ctx, car, "set", JS_NewCFunction(ctx, CarSet, "set", 2));
+        JS_SetPropertyStr(ctx, car, "id",  JS_NewCFunction(ctx, CarId, "id", 0));
+        JS_SetPropertyStr(ctx, store, "car", car);
 
         JS_SetPropertyStr(ctx, speed, "store", store);
     }

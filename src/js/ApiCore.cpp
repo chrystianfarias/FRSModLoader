@@ -4,6 +4,7 @@
 #include "JsRuntime.h"
 #include "core/Config.h"
 #include "core/Log.h"
+#include "core/Version.h"
 #include "ui/CefHost.h"
 
 #include <string>
@@ -39,13 +40,14 @@ namespace
         return line;
     }
 
-    // O console na tela ja existe: e o mesmo painel de speed.print, no canal
-    // "sl:log", com barra de comando e tudo. console.log so nao chegava nele.
+    // The on-screen console already exists: it is the same panel as
+    // speed.print, on the "sl:log" channel, command bar and all. console.log
+    // just never reached it.
     //
-    // Passa pelo JSON.stringify do proprio QuickJS, como o Print faz, porque
-    // aspas e acentos precisam atravessar inteiros - e escapar isso na mao,
-    // numa funcao chamada dezenas de vezes por segundo por um mod em
-    // desenvolvimento, e errado duas vezes.
+    // It goes through QuickJS's own JSON.stringify, as Print does, because
+    // quotes and accents have to make it across intact - and escaping that by
+    // hand, in a function called dozens of times a second by a mod under
+    // development, is wrong twice over.
     void Echo(JSContext* ctx, const char* id, const std::string& text)
     {
         static const bool on = Config::GetBool("UI", "Console", true);
@@ -78,8 +80,8 @@ namespace
         const char* id = mod ? mod->id.c_str() : "?";
         std::string line = Join(ctx, argc, argv);
         LogJs("[%s] ERROR %s", id, line.c_str());
-        // O painel nao tem nivel; a cor vem das marcacoes de speed.print.
-        Echo(ctx, id, "{vermelho}ERRO{/} " + line);
+        // The panel has no levels; the colour comes from speed.print's markup.
+        Echo(ctx, id, "{red}ERROR{/} " + line);
         return JS_UNDEFINED;
     }
 
@@ -111,7 +113,7 @@ namespace
         return JS_UNDEFINED;
     }
 
-    // speed.emit("fuel:state", { litros: 12 }) - to every OTHER mod's
+    // speed.emit("fuel:state", { litres: 12 }) - to every OTHER mod's
     // speed.on("fuel:state"), next frame. The name needs a colon, so it cannot
     // pass for one of the loader's own events ("frame", "keydown", ...).
     JSValue EmitEvent(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
@@ -221,7 +223,7 @@ namespace
         return JS_UNDEFINED;
     }
 
-    // Everything SpeedLoader has loaded, in load order. A mod calling this from
+    // Everything FRSModLoader has loaded, in load order. A mod calling this from
     // the top level of its own main.js sees a partial list - it is pushed before
     // its entry point runs, and whoever comes after is not there yet. From a
     // frame or an event, the list is complete.
@@ -280,7 +282,7 @@ namespace Js
                           JS_NewCFunction(ctx, ClearTimer, "clearInterval", 1));
         JS_FreeValue(ctx, global);
 
-        JS_SetPropertyStr(ctx, speed, "version", JS_NewString(ctx, "0.1.0"));
+        JS_SetPropertyStr(ctx, speed, "version", JS_NewString(ctx, FRSMODLOADER_VERSION));
         JS_SetPropertyStr(ctx, speed, "on",  JS_NewCFunction(ctx, On, "on", 2));
         JS_SetPropertyStr(ctx, speed, "off", JS_NewCFunction(ctx, Off, "off", 2));
         JS_SetPropertyStr(ctx, speed, "emit", JS_NewCFunction(ctx, EmitEvent, "emit", 2));
