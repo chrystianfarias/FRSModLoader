@@ -7,9 +7,10 @@
  * a thin bright edge. Everything here is that system, taken off the World Map
  * and Pause screens and written as classes.
  *
- * Everything is flat. No gradients anywhere, and exactly one glow in the whole
- * kit - the selected tile - because a glow that is everywhere points at
- * nothing.
+ * The rules are flat - no gradients, one glow, on the selected tile - and
+ * inside the game the pieces that exist as textures are then drawn with the
+ * game's own art, served from its packs at runtime: see "the game's own art"
+ * at the end of this file.
  *
  * Use it from a mod's page:
  *
@@ -82,27 +83,43 @@
    * cold, and every surface is translucent because the game is behind it.
    */
   --nfs-green: #b9e75b;
-  --nfs-green-bright: #d2f472;
+  --nfs-green-bright: #c0ee7b;     /* the World Map's title, measured */
   --nfs-green-dim: #7fa63f;
   --nfs-green-glow: rgba(170, 230, 90, .55);
 
-  --nfs-edge: #c8e88f;          /* the panel outline */
+  --nfs-edge: #bbd198;          /* the panel outline, measured off the game */
   --nfs-edge-soft: rgba(200, 232, 143, .35);
 
   --nfs-ink: #ffffff;
   --nfs-ink-soft: rgba(255, 255, 255, .62);
   --nfs-ink-dim: rgba(255, 255, 255, .34);
 
-  --nfs-panel: rgba(8, 10, 9, .82);
-  --nfs-panel-head: rgba(4, 6, 5, .86);
-  --nfs-row: rgba(88, 93, 90, .88);
-  --nfs-row-alt: rgba(78, 83, 80, .88);
-  --nfs-row-empty: rgba(62, 66, 64, .72);
-  --nfs-gutter: rgba(46, 50, 48, .9);
-  --nfs-row-line: rgba(0, 0, 0, .55);
+  /* Measured off a screenshot of the World Map: the panel is three layers of
+   * the game's 60% black (94%), the head is not a bar of its own, and the
+   * rows are a dark, neutral grey on a black rule. */
+  --nfs-panel: rgba(0, 0, 0, .936);
+  --nfs-panel-head: transparent;
+  --nfs-row: #212020;
+  --nfs-row-alt: #212020;
+  --nfs-row-head: #2e2d2e;
+  --nfs-row-empty: #1e1d1d;
+  --nfs-gutter: #1b1a1b;
+  --nfs-row-line: #000;
+  --nfs-row-ink: #dcdcdc;
+  --nfs-subtitle: #b9b9b9;
+  --nfs-check: #20c820;
   --nfs-row-on: rgba(116, 158, 56, .72);
 
   --nfs-btn: rgba(10, 12, 11, .78);
+
+  /* The options sheet (Audio, Video, Player...): light grey over the game,
+   * dark text, and the selected row a dark bar. Measured off the Player page. */
+  --nfs-sheet: rgba(196, 196, 196, .56);
+  --nfs-sheet-ink: #272727;
+  --nfs-sheet-ink-soft: rgba(39, 39, 39, .68);
+  --nfs-option-on: rgba(24, 24, 24, .86);
+  --nfs-pulse-time: 1.05s;     /* one breath of the selected text */
+  --nfs-press-time: .3s;       /* an arrow answering a press */
   --nfs-btn-edge: rgba(226, 238, 210, .75);
 
   /* The map pins, and the only colours in the game's UI that are not green. */
@@ -115,6 +132,8 @@
 
   --nfs-size: 15px;
   --nfs-radius: 10px;
+  --nfs-edge-width: .18em;      /* two of the game's 640x480 pixels, at kit scale */
+  --nfs-rule-width: .18em;      /* the black between rows, the same two */
 
   /* The game's own face (the @font-face rules above), italic as its menus
    * set it; the rest of the stack is for a page opened without ui/fonts. */
@@ -138,7 +157,7 @@
  */
 .nfs-panel {
   position: relative;
-  border: 2px solid var(--nfs-edge);
+  border: var(--nfs-edge-width) solid var(--nfs-edge);
   border-radius: var(--nfs-radius);
   background: var(--nfs-panel);
   padding: .55em;
@@ -182,7 +201,7 @@
  * title. "Full Map" on the world map screen. */
 .nfs-subtitle {
   font-size: 1.15em;
-  color: var(--nfs-ink);
+  color: var(--nfs-subtitle);
   text-align: center;
 }
 
@@ -218,9 +237,9 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--nfs-rule-width);
   background: var(--nfs-row-line);
-  border: 1px solid rgba(0, 0, 0, .5);
+  border: 0;
 }
 
 .nfs-row {
@@ -230,12 +249,16 @@
   min-height: 2.35em;
   padding: 0 .8em;
   background: var(--nfs-row);
-  color: var(--nfs-ink);
+  color: var(--nfs-row-ink);
   font-size: 1.05em;
   cursor: default;
 }
 
-.nfs-row:nth-child(even) { background-color: var(--nfs-row-alt); }
+.nfs-row:where(:nth-child(even)) { background-color: var(--nfs-row-alt); }
+/* :where keeps the alternate shade as weak as a plain .nfs-row: every state
+ * below (empty, selected, heading) is written later and wins on any row, odd
+ * or even. Without it the even rows kept their grey and a list of selected
+ * rows came out striped. */
 
 /* The filler rows at the bottom: same bar, no content, dimmer. */
 .nfs-row--empty { background: var(--nfs-row-empty); min-height: 2.35em; }
@@ -250,11 +273,16 @@
 }
 
 .nfs-row--clickable { cursor: pointer; }
-.nfs-row--clickable:hover { background-color: rgba(96, 120, 70, .6); }
+/* Hover lights a row that is not the selected one; the selected look is
+ * never changed by the pointer. A page that selects on hover, as the game's
+ * menus do, never shows this at all. */
+.nfs-row--clickable:not(.nfs-row--on):not([aria-selected="true"]):hover {
+  background-color: rgba(96, 120, 70, .6);
+}
 
 /* A heading row - "Your Car", "Opponent Car" - which is a row with a triangle
  * instead of a check. */
-.nfs-row--head { color: var(--nfs-ink); font-weight: 600; }
+.nfs-row--head { background: var(--nfs-row-head); color: var(--nfs-row-ink); }
 
 .nfs-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nfs-row__value { color: var(--nfs-ink-soft); font-variant-numeric: tabular-nums; }
@@ -269,8 +297,8 @@
   justify-content: center;
   margin: 0 .55em 0 -.8em;
   background: var(--nfs-gutter);
-  border-right: 1px solid rgba(0, 0, 0, .45);
-  color: var(--nfs-pin-green);
+  border-right: var(--nfs-rule-width) solid var(--nfs-row-line);
+  color: var(--nfs-check);
   font-weight: 700;
   font-style: normal;
 }
@@ -393,6 +421,8 @@
 .nfs-tile {
   flex: 1;
   display: flex;
+  flex-direction: column;   /* an icon, if there is one, over its label */
+  gap: .3em;
   align-items: center;
   justify-content: center;
   min-height: 4.2em;
@@ -481,8 +511,8 @@
 .nfs-split {
   display: grid;
   grid-template-columns: minmax(12em, 22em) 1fr;
-  gap: 1px;
-  background: rgba(0, 0, 0, .5);
+  gap: calc(var(--nfs-rule-width) * 2);
+  background: transparent;
 }
 
 .nfs-split__side { min-width: 0; }
@@ -517,4 +547,300 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+}
+
+/* ------------------------------------------------------- the game's own art
+ *
+ * Inside the game, FRSModLoader serves the textures the menus are drawn with at
+ * http://nfsu2.tex/<NAME>, read out of the player's own FRONTEND and GLOBAL
+ * packs at runtime (src/ui/GameTextures.cpp). Nothing is copied out of the
+ * game and nothing ships with the loader.
+ *
+ * Where a piece of the kit exists as a texture, it is drawn with it: the pill
+ * button and the glow it takes when selected, the ring of the arrow buttons,
+ * the frame of a selected tile, the icons. The flat rules above stay
+ * underneath, and are what a browser without the game shows - a border-image
+ * that does not load falls back to the border it replaces.
+ *
+ * The tint is part of the URL (?tint=RRGGBB), because that is how FEng draws
+ * these: a white texture times a colour. A mod that moves the palette away
+ * from green overrides the --nfs-tex-* that carry one.
+ */
+.nfs {
+  /* The game's own layouts draw the pill at alpha 150 of 255, and the glow
+   * over it at full. */
+  --nfs-tex-btn:      url("http://nfsu2.tex/UI_PC_GENERIC_BUTTON?tint=ffffff96");
+  --nfs-tex-btn-on:   url("http://nfsu2.tex/UI_PC_GENERIC_BUTTON?tint=b9e75b96");
+  --nfs-tex-btn-off:  url("http://nfsu2.tex/UI_PC_GENERIC_BUTTON?tint=6c6c6c96");
+  --nfs-tex-btn-glow: url("http://nfsu2.tex/UI_PC_GENERIC_BUTTON_GLOW?tint=b9e75b");
+  --nfs-tex-ring:     url("http://nfsu2.tex/U2_MENU_ARROW_HIGHLIGHT?tint=ffffff8c");
+  --nfs-tex-ring-on:  url("http://nfsu2.tex/U2_MENU_ARROW_HIGHLIGHT?tint=b9e75b");
+  --nfs-tex-tile-on:  url("http://nfsu2.tex/U2_ICON_HIGHLIGHT?tint=b9e75b");
+  --nfs-tex-panel:    url("http://nfsu2.tex/U2_MENU_ROUNDEDCORNER?mirror&stack=3");
+}
+
+/* The card. The game builds every menu panel from one 16x16 corner of black at
+ * 60% and a box of the same, and stacks three copies of it on the World Map -
+ * which is where its depth of black comes from (94%, and a screenshot agrees).
+ * ?stack=3 is those three in one texture, inside the green edge.
+ *
+ * This one replaces a fill rather than an edge, so it cannot fall back on its
+ * own: it waits for the shell to say the textures are there (data-nfs-tex on
+ * the page and on each mod's host) and until then the flat fill stays. */
+:host([data-nfs-tex]) .nfs-panel,
+[data-nfs-tex] .nfs-panel {
+  background: none;
+  isolation: isolate;
+}
+
+:host([data-nfs-tex]) .nfs-panel::before,
+[data-nfs-tex] .nfs-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Sliced at 15, not 16, so the whole box keeps two middle rows and columns
+   * to stretch into the edges and the fill. Twice the kit's radius: the
+   * corner is round over about 6 of its 16 pixels, which lands it on the
+   * inside of the green edge. */
+  border-image: var(--nfs-tex-panel) 15 fill / calc(var(--nfs-radius) * 2);
+}
+
+/* The pill is opaque black inside and a little shorter than its box; the flat
+ * fill would show around it as a halo. */
+:host([data-nfs-tex]) .nfs-btn,
+[data-nfs-tex] .nfs-btn { background: none; }
+
+/* The pill is 256x32 with its caps in the outer 16 pixels. The caps are drawn
+ * a little under half the button's height, so a sliver of the middle rows is
+ * left to stretch between them: those rows are the straight part of the
+ * outline, and stretching them is what lets one texture fit any height. */
+.nfs-btn {
+  position: relative;
+  border-image: var(--nfs-tex-btn) 15 16 fill / .9em stretch;
+}
+
+.nfs-btn:hover,
+.nfs-btn:focus-visible,
+.nfs-btn.is-on { border-image-source: var(--nfs-tex-btn-on); }
+
+.nfs-btn[disabled],
+.nfs-btn.is-off { border-image-source: var(--nfs-tex-btn-off); }
+
+/* The glow the game lays over a selected button: a soft band across the
+ * black, added on top rather than behind, which is why it is screened. */
+.nfs-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--nfs-tex-btn-glow) center / 100% 100% no-repeat;
+  mix-blend-mode: screen;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s linear;
+}
+
+.nfs-btn:hover::after,
+.nfs-btn:focus-visible::after,
+.nfs-btn.is-on::after { opacity: 1; }
+
+.nfs-btn[disabled]::after,
+.nfs-btn.is-off::after { opacity: 0; }
+
+/* The ring is a 32x32 circle: four quadrants of 16, each a quarter of the
+ * button. */
+.nfs-btn-round { border-image: var(--nfs-tex-ring) 16 fill / 50%; }
+
+.nfs-btn-round:hover,
+.nfs-btn-round:focus-visible,
+.nfs-btn-round.is-on { border-image-source: var(--nfs-tex-ring-on); }
+
+/* The game's highlight frame, which carries its own wash of colour inside -
+ * so the flat fill underneath steps back when it is there. */
+.nfs-tile--on,
+.nfs-tile[aria-selected="true"] {
+  border-image: var(--nfs-tex-tile-on) 12 fill / .8em;
+}
+
+/* ---------------------------------------------------------------- the icons
+ *
+ * Any texture of the game as a glyph, in the colour of the text around it:
+ * the texture is the mask and currentColor is the paint, the same texture
+ * times colour FEng does. Name the texture in --nfs-icon.
+ *
+ *     <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/INGAME_ICON_RESTART_RACE)"></span>
+ *
+ * Most of the menu icons are 128x64, hence the default 2:1 box. Outside the
+ * game the mask does not load and the icon is simply not there.
+ */
+.nfs-icon {
+  display: inline-block;
+  flex: none;
+  width: 4em;
+  height: 2em;
+  background-color: currentColor;
+  -webkit-mask: var(--nfs-icon) center / contain no-repeat;
+          mask: var(--nfs-icon) center / contain no-repeat;
+}
+
+.nfs-icon--square { width: 2em; }
+
+/* The circled arrow from either side of a header, as one piece of art. It is
+ * a button of its own; the left one is the same texture, flipped. */
+.nfs-arrow {
+  --nfs-icon: url("http://nfsu2.tex/U2_MENU_ARROW");
+  display: inline-block;
+  width: 2.1em;
+  height: 2.1em;
+  padding: 0;
+  border: 0;
+  background-color: var(--nfs-ink);
+  -webkit-mask: var(--nfs-icon) center / contain no-repeat;
+          mask: var(--nfs-icon) center / contain no-repeat;
+  cursor: pointer;
+  transition: background-color .12s linear, transform .08s ease-out;
+}
+
+.nfs-arrow--left { --nfs-icon: url("http://nfsu2.tex/U2_MENU_ARROW?flip=h"); }
+
+.nfs-arrow:hover,
+.nfs-arrow:focus-visible,
+.nfs-arrow.is-on { background-color: var(--nfs-green); outline: none; }
+
+/* ---------------------------------------------------------- the options sheet
+ *
+ * The pages under the game's Options (Audio, Video, Player...): a light,
+ * translucent sheet with dark italic text, one row per setting and the value
+ * in a column of its own. The selected row is a dark rounded bar that stays
+ * put; what moves is its text, pulsing in the green. The circled arrows
+ * either side of the value are shown on that row only, and they answer a
+ * press - a click, or Left / Right - by swelling once and flashing green
+ * (.is-pressed, added by the page). The mouse selects the way the keyboard
+ * does: the row under the pointer is the selected one (the page moves
+ * .nfs-option--on on mouseenter).
+ *
+ *   <div class="nfs-sheet">
+ *     <ul class="nfs-options">
+ *       <li class="nfs-option nfs-option--head">Camera</li>
+ *       <li class="nfs-option nfs-option--on">
+ *         <span class="nfs-option__label">Camera</span>
+ *         <button class="nfs-arrow nfs-arrow--left"></button>
+ *         <span class="nfs-option__value">Far</span>
+ *         <button class="nfs-arrow"></button>
+ *       </li>
+ *     </ul>
+ *   </div>
+ */
+.nfs-sheet {
+  background: var(--nfs-sheet);
+  border-radius: var(--nfs-radius);
+  padding: .4em .45em;
+  color: var(--nfs-sheet-ink);
+}
+
+.nfs-options {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: .1em;
+}
+
+.nfs-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.9em minmax(7.5em, auto) 1.9em;
+  align-items: center;
+  column-gap: .45em;
+  min-height: 2.25em;
+  padding: 0 .4em 0 .85em;
+  border-radius: calc(var(--nfs-radius) * .7);
+  color: var(--nfs-sheet-ink);
+  font-size: 1.12em;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nfs-option__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.nfs-option__value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.nfs-option__value .nfs-track { flex: none; width: 5em; }
+
+/* The arrows are there on every row, holding the column, and seen on one. */
+.nfs-option .nfs-arrow { width: 1.55em; height: 1.55em; justify-self: center; visibility: hidden; }
+
+.nfs-option--on,
+.nfs-option[aria-selected="true"] {
+  background: var(--nfs-option-on);
+  color: var(--nfs-green-bright);
+}
+.nfs-option--on .nfs-arrow,
+.nfs-option[aria-selected="true"] .nfs-arrow { visibility: visible; }
+
+/* A heading between groups: small, spaced, not selectable. */
+.nfs-option--head {
+  grid-template-columns: 1fr;
+  min-height: 1.8em;
+  padding-top: .3em;
+  font-size: .8em;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--nfs-sheet-ink-soft);
+  cursor: default;
+}
+
+/* A row that can be seen but has no effect now (its mod is off, say). */
+.nfs-option--dim { opacity: .45; }
+
+/* ------------------------------------------------------------------- pulses
+ *
+ * The game's selection does not move and does not glow: its text breathes -
+ * but only where the player is. A selected row pulses while its list has the
+ * focus: .is-focus on the list (the page moves it between lists, as the Mods
+ * menu does between its mods and their settings) or the real focus inside
+ * it. Selected rows elsewhere stay lit and still; so do lists that use
+ * --on for a state rather than for the cursor (a legend of what is shown).
+ * .nfs-pulse makes any text breathe regardless.
+ *
+ * An arrow does not breathe: it answers. When the player presses it (a
+ * click, or the Left / Right key its side stands for) it swells and flashes
+ * green once. The page adds .is-pressed and takes it off on animationend; a
+ * mouse button held on it keeps it swollen (:active).
+ */
+:is(.nfs-list, .nfs-options):is(.is-focus, :focus-within)
+  :is(.nfs-row--on, .nfs-row[aria-selected="true"])
+  :is(.nfs-row__label, .nfs-row__value),
+:is(.nfs-list, .nfs-options):is(.is-focus, :focus-within)
+  :is(.nfs-option--on, .nfs-option[aria-selected="true"])
+  :is(.nfs-option__label, .nfs-option__value),
+.nfs-pulse {
+  animation: nfs-text-pulse var(--nfs-pulse-time) ease-in-out infinite;
+}
+
+.nfs-arrow:active { transform: scale(1.2); background-color: var(--nfs-green-bright); }
+.nfs-arrow.is-pressed { animation: nfs-arrow-press var(--nfs-press-time) ease-out; }
+
+@keyframes nfs-text-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .45; }
+}
+
+@keyframes nfs-arrow-press {
+  0%   { transform: scale(1);    background-color: var(--nfs-ink); }
+  40%  { transform: scale(1.25); background-color: var(--nfs-green-bright); }
+  100% { transform: scale(1);    background-color: var(--nfs-ink); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nfs * { animation: none !important; }
 }

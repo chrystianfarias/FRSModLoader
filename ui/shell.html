@@ -1,16 +1,17 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>SpeedLoader</title>
+<title>FRSModLoader</title>
 <!--
   The single page CEF loads over the game.
 
-  It draws nothing of its own: it reads mods.json (written by SpeedLoader as it
+  It draws nothing of its own: it reads mods.json (written by FRSModLoader as it
   loads the mods) and mounts one UI fragment per mod, each inside its own shadow
   root - so one mod's CSS never leaks into another's.
 
   Each mod gets:
-    speedloader.send(channel, data)   -> reaches the mod's main.js
-    speedloader.on(channel, callback) <- whatever main.js sends back
+    frsmodloader.send(channel, data)   -> reaches the mod's main.js
+    frsmodloader.on(channel, callback) <- whatever main.js sends back
+    frsmodloader.sound(name)           -> one of the game's menu sounds
     root                              -> the shadow root it draws into
 -->
 <style>
@@ -55,8 +56,9 @@
     color: #d8d8dc;
     width: fit-content; max-width: 100%;
     word-break: break-word;
-    /* As linhas somem sozinhas: um console que acumula vira cortina sobre o
-       jogo. Com a barra aberta elas voltam, porque ai o jogador esta lendo. */
+    /* The lines fade on their own: a console that piles up becomes a curtain
+       over the game. With the bar open they come back, because then the
+       player is reading. */
     transition: opacity 400ms linear;
   }
   .sl-line .sl-mod-tag { color: #6a6a72; margin-right: 6px; }
@@ -90,8 +92,8 @@
 
 <div id="sl-errors"></div>
 
-<!-- O console: historico do que os mods escrevem, e a barra de comando. Fica na
-     casca, e nao num mod, porque pertence a todos eles. -->
+<!-- The console: a history of what the mods write, and the command bar. It lives
+     in the shell, and not in a mod, because it belongs to all of them. -->
 <div id="sl-console">
   <div id="sl-log"></div>
   <div id="sl-bar"><span class="sl-prompt">/</span><input id="sl-input" spellcheck="false" autocomplete="off"></div>
@@ -111,17 +113,33 @@
 
   // The API each mod sees: channels are prefixed with the mod id, which is how
   // the native side knows who to deliver to.
+  //
+  // What a page subscribes to is remembered, so that mounting it again (a
+  // reload, a panel sent twice) takes the old copy's listeners away with it:
+  // a page that is gone must not keep answering.
   function apiFor(id) {
+    const subs = [];
     return {
       modId: id,
       send(channel, data) {
-        window.speedloader.send(id + ':' + channel, data);
+        window.frsmodloader.send(id + ':' + channel, data);
       },
       on(channel, cb) {
-        return window.speedloader.on(id + ':' + channel, cb);
+        subs.push([id + ':' + channel, cb]);
+        return window.frsmodloader.on(id + ':' + channel, cb);
       },
       off(channel, cb) {
-        window.speedloader.off(id + ':' + channel, cb);
+        window.frsmodloader.off(id + ':' + channel, cb);
+      },
+      dispose() {
+        subs.forEach(([c, cb]) => window.frsmodloader.off(c, cb));
+        subs.length = 0;
+      },
+      // One of the game's menu sounds, by name (src/game/MenuSound.h):
+      // up, down, left, right, valueLeft, valueRight, confirm, open, close,
+      // wrong. Played by the loader, so a page needs no main.js for it.
+      sound(name) {
+        window.frsmodloader.send('sl:sound', name);
       }
     };
   }
@@ -132,13 +150,26 @@
   // Who is on screen, by id. Mods from mods.json are mounted once at load;
   // native panels (an .asi asking for a UI through the host API) arrive later
   // and can be replaced or taken away, which is what this map is for.
-  const montados = new Map();
+  const mounted = new Map();
+
+  // Whether the game's own textures are there to draw with (http://nfsu2.tex,
+  // served by the loader). nfsu2.css keeps its flat fills under the textured
+  // pieces until it knows, and this mark - on the page and on every mod's
+  // host, since a shadow root cannot see past its host - is how it knows.
+  let textures = false;
+  fetch('http://nfsu2.tex/U2_MENU_BOX').then((r) => {
+    if (!r.ok) return;
+    textures = true;
+    document.documentElement.dataset.nfsTex = '';
+    mounted.forEach((host) => { host.dataset.nfsTex = ''; });
+  }).catch(() => {});
 
   function unmount(id) {
-    const host = montados.get(id);
+    const host = mounted.get(id);
     if (!host) return;
+    if (host.slApi) host.slApi.dispose();
     if (host.parentNode) host.parentNode.removeChild(host);
-    montados.delete(id);
+    mounted.delete(id);
   }
 
   function mount(mod, html) {
@@ -147,8 +178,9 @@
     const host = document.createElement('div');
     host.className = 'sl-mod';
     host.dataset.mod = mod.id;
+    if (textures) host.dataset.nfsTex = '';
     document.body.appendChild(host);
-    montados.set(mod.id, host);
+    mounted.set(mod.id, host);
 
     const root = host.attachShadow({ mode: 'open' });
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -165,11 +197,13 @@
     Array.from(doc.body.childNodes).forEach(n => root.appendChild(n));
 
     const api = apiFor(mod.id);
+    host.slApi = api;
+    host.dataset.key = mountKey(mod);
     const base = mod.url.slice(0, mod.url.lastIndexOf('/') + 1);
 
     const run = (code, origin) => {
       try {
-        new Function('speedloader', 'root', 'mod', code)(api, root, mod);
+        new Function('frsmodloader', 'root', 'mod', code)(api, root, mod);
       } catch (e) {
         fail(mod.id + ' / ' + origin + ': ' + e.message);
       }
@@ -192,24 +226,24 @@
     })();
   }
 
-  const espera = (ms) => new Promise(r => setTimeout(r, ms));
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
   async function load() {
-    // Rede de seguranca para a corrida entre a pagina abrir e o mods.json
-    // existir. O carregamento nativo agora escreve o arquivo antes de subir a
-    // UI, mas a pagina tambem recarrega sozinha (F5) e pode chegar em qualquer
-    // momento — tentar de novo custa menos que uma UI vazia.
+    // A safety net for the race between the page opening and mods.json
+    // existing. The native loading now writes the file before bringing up the
+    // UI, but the page also reloads on its own (F5) and can arrive at any
+    // moment — trying again costs less than an empty UI.
     let mods;
-    for (let tentativa = 1; tentativa <= 10; tentativa++) {
+    for (let attempt = 1; attempt <= 10; attempt++) {
       try {
         mods = await (await fetch('mods.json?t=' + Date.now())).json();
         break;
       } catch (e) {
-        if (tentativa === 10) {
+        if (attempt === 10) {
           fail('mods.json could not be read after 10 tries: ' + e.message);
           return;
         }
-        await espera(150);
+        await wait(150);
       }
     }
 
@@ -226,7 +260,7 @@
 
     // Native panels live only in the game's memory, not in mods.json, so the
     // page has to ask for them back every time it loads - including after F5.
-    window.speedloader.send('sl:panels', null);
+    window.frsmodloader.send('sl:panels', null);
   }
 
   // ------------------------------------------------------- native panels
@@ -234,36 +268,54 @@
   // An .asi mod that is not written in JavaScript gets its interface here. It
   // is mounted exactly like a mod's, with the same shadow root and the same
   // "<id>:<channel>" convention, so the page cannot tell the difference.
+  //
+  // The same panel can be sent twice: the loader mounts it as soon as the page
+  // is up, and the page asks for every panel again when it loads (it cannot
+  // tell a first load from an F5). Mounting it twice would run its script
+  // twice, so a panel already here - or on its way - with the same page and
+  // the same generation (panel_reload bumps it) is left alone.
+  const mountKey = (p) => p.url + '#' + (p.gen || 0);
+  const pending = new Map();   // id -> key being fetched
+
   async function mountPanel(panel) {
+    const key = mountKey(panel);
+    const cur = mounted.get(panel.id);
+    if ((cur && cur.dataset.key === key) || pending.get(panel.id) === key) return;
+    pending.set(panel.id, key);
     try {
       const response = await fetch(panel.url + '?t=' + Date.now());
       if (!response.ok) throw new Error('HTTP ' + response.status);
-      mount(panel, await response.text());
+      const html = await response.text();
+      // A newer request for this panel arrived meanwhile: that one mounts.
+      if (pending.get(panel.id) !== key) return;
+      mount(panel, html);
       console.log('[shell] panel ' + panel.id + ' mounted');
     } catch (e) {
       fail('panel ' + panel.id + ' failed: ' + e.message);
+    } finally {
+      if (pending.get(panel.id) === key) pending.delete(panel.id);
     }
   }
 
-  window.speedloader.on('sl:mount', (panel) => {
+  window.frsmodloader.on('sl:mount', (panel) => {
     if (panel && panel.id && panel.url) mountPanel(panel);
   });
 
-  window.speedloader.on('sl:unmount', (d) => {
+  window.frsmodloader.on('sl:unmount', (d) => {
     if (d && d.id) unmount(d.id);
   });
 
-  window.speedloader.on('sl:panel-show', (d) => {
-    const host = d && montados.get(d.id);
+  window.frsmodloader.on('sl:panel-show', (d) => {
+    const host = d && mounted.get(d.id);
     if (host) host.style.display = d.show ? '' : 'none';
   });
 
   // ------------------------------------------------------------------ console
   //
-  // A marcacao de cor e resolvida aqui, e nao no lado nativo: quem desenha e
-  // esta camada, e mandar a linha ja partida em pedacos so acrescentaria
-  // formato para manter dos dois lados.
-  const CORES = {
+  // The color markup is resolved here, and not on the native side: this layer
+  // is the one that draws, and sending the line already split into pieces
+  // would only add a format to maintain on both sides.
+  const COLORS = {
     vermelho: '#ff5a4a', red: '#ff5a4a',
     verde: '#3ddc72', green: '#3ddc72',
     amarelo: '#f2e600', yellow: '#f2e600',
@@ -277,34 +329,34 @@
   const logEl = document.getElementById('sl-log');
   const inputEl = document.getElementById('sl-input');
 
-  const MAX_LINHAS = 8;
-  const SOME_EM = 7000;
+  const MAX_LINES = 8;
+  const FADE_AFTER = 7000;
 
-  // "gastou {laranja}12.4 L{/} de alcool" -> nos coloridos.
-  function pintar(texto) {
+  // "burned {orange}12.4 L{/} of ethanol" -> colored nodes.
+  function paint(text) {
     const frag = document.createDocumentFragment();
     const re = /\{(\/|#[0-9a-fA-F]{3,6}|[a-zA-Z]+)\}/g;
-    let i = 0, cor = null, m;
+    let i = 0, color = null, m;
 
-    const empurrar = (t) => {
+    const push = (t) => {
       if (!t) return;
       const span = document.createElement('span');
       span.textContent = t;
-      if (cor) span.style.color = cor;
+      if (color) span.style.color = color;
       frag.appendChild(span);
     };
 
-    while ((m = re.exec(texto)) !== null) {
-      empurrar(texto.slice(i, m.index));
+    while ((m = re.exec(text)) !== null) {
+      push(text.slice(i, m.index));
       const tag = m[1];
-      cor = tag === '/' ? null : (tag[0] === '#' ? tag : (CORES[tag.toLowerCase()] || null));
+      color = tag === '/' ? null : (tag[0] === '#' ? tag : (COLORS[tag.toLowerCase()] || null));
       i = m.index + m[0].length;
     }
-    empurrar(texto.slice(i));
+    push(text.slice(i));
     return frag;
   }
 
-  function escrever(mod, texto) {
+  function writeLine(mod, text) {
     const div = document.createElement('div');
     div.className = 'sl-line';
 
@@ -314,58 +366,58 @@
       tag.textContent = mod;
       div.appendChild(tag);
     }
-    div.appendChild(pintar(String(texto)));
+    div.appendChild(paint(String(text)));
     logEl.appendChild(div);
 
-    while (logEl.children.length > MAX_LINHAS) logEl.removeChild(logEl.firstChild);
+    while (logEl.children.length > MAX_LINES) logEl.removeChild(logEl.firstChild);
 
-    setTimeout(() => { div.style.opacity = '0'; }, SOME_EM);
-    setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, SOME_EM + 500);
+    setTimeout(() => { div.style.opacity = '0'; }, FADE_AFTER);
+    setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, FADE_AFTER + 500);
   }
 
-  window.speedloader.on('sl:log', (d) => escrever(d && d.mod, d && d.text));
-  window.speedloader.on('sl:command-reply', (t) => escrever('sl', t));
+  window.frsmodloader.on('sl:log', (d) => writeLine(d && d.mod, d && d.text));
+  window.frsmodloader.on('sl:command-reply', (t) => writeLine('sl', t));
 
-  // A "/" que abre a barra chega duas vezes: uma como tecla, que o lado nativo
-  // intercepta para abrir, e outra como caractere, ja com o teclado entregue a
-  // UI — e essa segunda aparecia digitada no campo. A primeira barra depois de
-  // abrir e descartada.
-  let engolirBarra = false;
+  // The "/" that opens the bar arrives twice: once as a key, which the native
+  // side intercepts to open it, and again as a character, with the keyboard
+  // already handed to the UI — and that second one showed up typed in the
+  // field. The first slash after opening is dropped.
+  let swallowSlash = false;
 
-  window.speedloader.on('sl:command-open', () => {
+  window.frsmodloader.on('sl:command-open', () => {
     consoleEl.classList.add('open');
     inputEl.value = '';
-    engolirBarra = true;
-    setTimeout(() => { engolirBarra = false; }, 250);
+    swallowSlash = true;
+    setTimeout(() => { swallowSlash = false; }, 250);
     inputEl.focus();
   });
 
   inputEl.addEventListener('beforeinput', (e) => {
-    if (engolirBarra && e.data === '/') { e.preventDefault(); engolirBarra = false; }
+    if (swallowSlash && e.data === '/') { e.preventDefault(); swallowSlash = false; }
   });
 
-  function fechar() {
+  function closeConsole() {
     consoleEl.classList.remove('open');
     inputEl.blur();
-    window.speedloader.send('sl:command-close', null);
+    window.frsmodloader.send('sl:command-close', null);
   }
 
   inputEl.addEventListener('keydown', (e) => {
     e.stopPropagation();
-    if (e.key === 'Escape') { fechar(); return; }
+    if (e.key === 'Escape') { closeConsole(); return; }
     if (e.key !== 'Enter') return;
 
-    const linha = inputEl.value.trim();
+    const line = inputEl.value.trim();
     inputEl.value = '';
-    fechar();
-    if (linha) {
-      escrever('sl', '{cinza}/' + linha + '{/}');
-      window.speedloader.send('sl:command', linha);
+    closeConsole();
+    if (line) {
+      writeLine('sl', '{gray}/' + line + '{/}');
+      window.frsmodloader.send('sl:command', line);
     }
   });
 
-  if (!window.speedloader) {
-    fail('window.speedloader is missing: did SpeedLoaderHelper.exe start?');
+  if (!window.frsmodloader) {
+    fail('window.frsmodloader is missing: did FRSModLoaderHelper.exe start?');
   }
   load();
 })();

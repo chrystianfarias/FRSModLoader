@@ -91,6 +91,12 @@
       Everything is scoped under <code>.nfs</code>, and the whole kit scales
       from one variable, <code>--nfs-size</code>.
     </p>
+    <p>
+      Inside the game the buttons, rings, highlights and icons are drawn with
+      the game's own textures, served from its packs at
+      <code>http://nfsu2.tex/</code>. Opened straight from disk, this page
+      shows the flat version underneath, and the icons are not there.
+    </p>
   </header>
 
   <!-- ----------------------------------------------------------- panel -->
@@ -167,9 +173,9 @@
           </div>
 
           <div class="nfs-tiles">
-            <button class="nfs-tile">Restart Race</button>
-            <button class="nfs-tile nfs-tile--on">Return to Explore Mode</button>
-            <button class="nfs-tile">Garage</button>
+            <button class="nfs-tile"><span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/INGAME_ICON_RESTART_RACE)"></span>Restart Race</button>
+            <button class="nfs-tile nfs-tile--on"><span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/INGAME_ICON_EXPLORE)"></span>Return to Explore Mode</button>
+            <button class="nfs-tile"><span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/INGAME_ICON_WORLD_MAP)"></span>World Map</button>
             <button class="nfs-tile" style="flex: 0 0 4.2em">&#8594;</button>
           </div>
 
@@ -183,10 +189,53 @@
       </div>
     </div>
     <div class="code">&lt;div class="nfs-tiles"&gt;
-  &lt;button class="nfs-tile"&gt;Restart Race&lt;/button&gt;
+  &lt;button class="nfs-tile"&gt;
+    &lt;span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/INGAME_ICON_RESTART_RACE)"&gt;&lt;/span&gt;
+    Restart Race
+  &lt;/button&gt;
   &lt;button class="nfs-tile nfs-tile--on"&gt;Return to Explore Mode&lt;/button&gt;
 &lt;/div&gt;
 &lt;div class="nfs-caption"&gt;Return to Explore Mode&lt;/div&gt;</div>
+  </section>
+
+  <!-- ---------------------------------------------------------- options -->
+  <section class="section">
+    <h2>Options sheet - the Player screen</h2>
+    <div class="nfs">
+      <div class="nfs-sheet" style="max-width: 40em">
+        <ul class="nfs-options is-focus" id="demo-options">
+          <li class="nfs-option nfs-option--head">Driving</li>
+          <li class="nfs-option"><span class="nfs-option__label">Transmission</span><button class="nfs-arrow nfs-arrow--left"></button><span class="nfs-option__value">Automatic</span><button class="nfs-arrow"></button></li>
+          <li class="nfs-option"><span class="nfs-option__label">Stability Control</span><button class="nfs-arrow nfs-arrow--left"></button><span class="nfs-option__value">Off</span><button class="nfs-arrow"></button></li>
+          <li class="nfs-option nfs-option--on"><span class="nfs-option__label">Camera</span><button class="nfs-arrow nfs-arrow--left"></button><span class="nfs-option__value">Far</span><button class="nfs-arrow"></button></li>
+          <li class="nfs-option nfs-option--head">HUD</li>
+          <li class="nfs-option"><span class="nfs-option__label">Gauges</span><button class="nfs-arrow nfs-arrow--left"></button><span class="nfs-option__value">On</span><button class="nfs-arrow"></button></li>
+          <li class="nfs-option"><span class="nfs-option__label">Volume</span><button class="nfs-arrow nfs-arrow--left"></button><span class="nfs-option__value"><span class="nfs-track" style="--value: .6"><span class="nfs-track__fill"></span></span>60%</span><button class="nfs-arrow"></button></li>
+          <li class="nfs-option nfs-option--dim"><span class="nfs-option__label">Split Times</span><button class="nfs-arrow nfs-arrow--left"></button><span class="nfs-option__value">Leader</span><button class="nfs-arrow"></button></li>
+        </ul>
+      </div>
+    </div>
+    <script>
+      // The row under the pointer is the selected one, as in the game.
+      document.querySelectorAll('#demo-options .nfs-option:not(.nfs-option--head)').forEach((row) => {
+        row.addEventListener('mouseenter', () => {
+          document.querySelectorAll('#demo-options .nfs-option--on')
+            .forEach((r) => r.classList.remove('nfs-option--on'));
+          row.classList.add('nfs-option--on');
+        });
+      });
+    </script>
+    <div class="code">&lt;div class="nfs-sheet"&gt;
+  &lt;ul class="nfs-options is-focus"&gt;
+    &lt;li class="nfs-option nfs-option--head"&gt;Driving&lt;/li&gt;
+    &lt;li class="nfs-option nfs-option--on"&gt;
+      &lt;span class="nfs-option__label"&gt;Camera&lt;/span&gt;
+      &lt;button class="nfs-arrow nfs-arrow--left"&gt;&lt;/button&gt;
+      &lt;span class="nfs-option__value"&gt;Far&lt;/span&gt;
+      &lt;button class="nfs-arrow"&gt;&lt;/button&gt;
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/div&gt;</div>
   </section>
 
   <!-- ------------------------------------------------------------ parts -->
@@ -207,12 +256,15 @@
               <button class="nfs-btn nfs-btn--wide">Activate GPS</button>
               <button class="nfs-btn-round">&#8592;</button>
               <button class="nfs-btn-round is-on">&#8594;</button>
+              <button class="nfs-arrow nfs-arrow--left"></button>
+              <button class="nfs-arrow is-on"></button>
             </div>
           </div>
         </div>
         <div class="code">&lt;button class="nfs-btn"&gt;Back&lt;/button&gt;
 &lt;button class="nfs-btn is-on"&gt;Selected&lt;/button&gt;
-&lt;button class="nfs-btn-round"&gt;&amp;#8594;&lt;/button&gt;</div>
+&lt;button class="nfs-btn-round"&gt;&amp;#8594;&lt;/button&gt;
+&lt;button class="nfs-arrow nfs-arrow--left"&gt;&lt;/button&gt;</div>
       </div>
 
       <div class="section">
@@ -248,6 +300,26 @@
           </div>
         </div>
         <div class="code">&lt;span class="nfs-dot nfs-dot--purple"&gt;&lt;/span&gt;</div>
+      </div>
+
+      <div class="section">
+        <h2>Icons - any texture of the game</h2>
+        <div class="nfs">
+          <div class="nfs-panel nfs-panel--plain">
+            <div class="row-of">
+              <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/MAIN_ICON_CAREER)"></span>
+              <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/MAIN_ICON_QUICK_RACE)"></span>
+              <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/MAIN_ICON_OPTIONS)"></span>
+              <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/CRIB_ICON_WORLD_MAP); color: var(--nfs-green)"></span>
+              <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/SHOP_ICON_PERFORMANCE)"></span>
+              <span class="nfs-icon" style="--nfs-icon: url(http://nfsu2.tex/ICON_CASH)"></span>
+            </div>
+          </div>
+        </div>
+        <div class="code">&lt;span class="nfs-icon"
+      style="--nfs-icon: url(http://nfsu2.tex/MAIN_ICON_CAREER)"&gt;&lt;/span&gt;
+
+http://nfsu2.tex/index.json lists every name.</div>
       </div>
 
       <div class="section">
