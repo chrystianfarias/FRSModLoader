@@ -46,6 +46,7 @@ namespace Js
     void RegisterCommands(JSContext* ctx, JSValue speed, Mod* mod);
     void RegisterStore(JSContext* ctx, JSValue speed, Mod* mod);
     void RegisterDraw(JSContext* ctx, JSValue speed, Mod* mod);
+    void RegisterSettings(JSContext* ctx, JSValue speed, Mod* mod);
 
     // Slash commands: the bar in the shell sends a line, this runs it.
     void RunCommand(const std::string& line);

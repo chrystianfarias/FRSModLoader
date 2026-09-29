@@ -1,7 +1,7 @@
-# Writing mods for SpeedLoader
+# Writing mods for FRSModLoader
 
 A mod is a folder with JavaScript in it. Nothing is compiled, nothing is
-registered: SpeedLoader reads every folder under `mods\` when the game starts,
+registered: FRSModLoader reads every folder under `mods\` when the game starts,
 and a folder with a `mod.json` in it is a mod.
 
 ```
@@ -51,7 +51,7 @@ take the interface without any of this:
 `mods/hello/main.js`:
 
 ```js
-/// <reference path="../../sdk/speedloader.d.ts" />
+/// <reference path="../../sdk/frsmodloader.d.ts" />
 
 speed.print("hello from {green}" + speed.mod.name + "{/}");
 
@@ -67,7 +67,7 @@ Then:
 ```
 
 Start the game. The line shows up in the in-game console — press `/` to open
-it — and in `scripts\SpeedLoader.log`.
+it — and in `scripts\FRSModLoader.log`.
 
 That first line is not a comment that does nothing: it points your editor at
 the SDK types, and every `speed.*` below is then completed and checked as you
@@ -79,10 +79,14 @@ type, in VS Code with nothing installed.
 |---|---|
 | `id` | unique; names the mod's channels, its save file and its log prefix |
 | `name` | what the player sees |
-| `version` | yours, for your own sanity |
+| `version` | shown in the Mods menu |
+| `author` | shown in the Mods menu |
+| `description` | a sentence or two, shown in the Mods menu |
+| `thumb` | the mod's picture in the Mods menu, relative to its folder; default `thumb.png`, 16:9 reads best |
 | `main` | entry point, default `main.js` |
 | `ui` | the page, e.g. `ui/index.html`; leave it out for a mod with no interface |
-| `enabled` | `false` keeps the folder installed and the mod dormant |
+| `enabled` | the default: `false` keeps the mod installed and dormant until the player switches it on |
+| `settings` | what the player can set in the Mods menu - see [Settings](#settings-and-the-mods-menu) |
 
 Folders load in the order the filesystem lists them - alphabetical, in
 practice - each in its own QuickJS context: a global in one mod is invisible to
@@ -93,8 +97,8 @@ another, and a mod that throws on load does not take the others down with it.
 ```
 main.js  (QuickJS, game thread)        ui/index.html  (Chromium, its own process)
    |                                            |
-   |-- speed.ui.send("rpm", {...}) ------------>|  speedloader.on("rpm", cb)
-   |<------------- speedloader.send("ready") ---|
+   |-- speed.ui.send("rpm", {...}) ------------>|  frsmodloader.on("rpm", cb)
+   |<------------- frsmodloader.send("ready") ---|
 ```
 
 They share no memory. What crosses is JSON, so what you send has to survive
@@ -119,8 +123,8 @@ speed.on("ui:ready", () => speed.ui.send("config", { units: "metric" }));
 ```html
 <!-- ui/index.html -->
 <script>
-  speedloader.on("config", (c) => { /* ... */ });
-  speedloader.send("ready");
+  frsmodloader.on("config", (c) => { /* ... */ });
+  frsmodloader.send("ready");
 </script>
 ```
 
@@ -202,7 +206,7 @@ root, with three things in scope for its `<script>` tags:
 
 | | |
 |---|---|
-| `speedloader` | `.send(channel, data)`, `.on(channel, cb)`, `.off(channel, cb)` |
+| `frsmodloader` | `.send(channel, data)`, `.on(channel, cb)`, `.off(channel, cb)` |
 | `root` | the shadow root — use `root.getElementById`, not `document` |
 | `mod` | `{ id, name, url }` |
 
@@ -216,15 +220,23 @@ root, with three things in scope for its `<script>` tags:
 
 <script>
   const el = root.getElementById("rpm");
-  speedloader.on("rpm", (d) => { el.textContent = Math.round(d.rpm); });
-  speedloader.send("ready");
+  frsmodloader.on("rpm", (d) => { el.textContent = Math.round(d.rpm); });
+  frsmodloader.send("ready");
 </script>
 ```
 
 Each mod's layer covers the screen with `pointer-events: none`, so it does not
 eat clicks meant for the game. Anything the player must click needs
-`pointer-events: auto` on that element — and the player needs to press **F1**,
-which is what hands keyboard and mouse to the UI and gives them back.
+`pointer-events: auto` on that element. The mouse needs nothing else: a click on
+something your page drew is your page's, anywhere else it is the game's, and the
+pointer is the game's own cursor, drawn above the UI. The **keyboard** comes to
+the page only when handed over - **F1** by the player, or
+`speed.ui.capture(true)` from your mod.
+
+A screen of yours that is meant to feel like one of the game's is driven by the
+arrows, Enter and Esc, and makes the game's menu sounds as it goes
+(`frsmodloader.sound("down")`). The pattern, and the list of sounds, are in
+[UI-KIT.md → Keyboard and sounds](UI-KIT.md#keyboard-and-sounds).
 
 To make the panel look like the game instead of like a web page, link the kit
 that ships with the loader - the green-outlined panel, the grey list, the pill
@@ -248,6 +260,70 @@ DevTools. Relative paths resolve against the mod's own `ui/` folder, so images
 and extra scripts sit next to `index.html`. It is also a whole browser sharing
 the frame: prefer transform and opacity for anything animated, and do not
 re-layout the page sixty times a second.
+
+## Settings and the Mods menu
+
+The game's Options menu has a **Mods** entry, the loader's own: every installed
+mod with its picture, a switch to turn it on or off, and its settings, drawn in
+the game's style and driven by the keyboard like the rest of the menu. A mod
+does not draw any of it. It lists what it has, in `mod.json`:
+
+```json
+{
+  "id": "pops",
+  "name": "Pops",
+  "version": "1.2",
+  "author": "Chrystian Farias",
+  "description": "Pops and bangs on lift-off, with the tone of the engine.",
+  "thumb": "thumb.png",
+  "settings": [
+    { "type": "section", "label": "Sound" },
+    { "id": "volume", "type": "range", "label": "Volume",
+      "min": 0, "max": 100, "step": 5, "unit": "%", "default": 80 },
+    { "id": "onLift", "type": "toggle", "label": "Pops on lift-off", "default": true,
+      "on": "Yes", "off": "No" },
+    { "id": "engine", "type": "choice", "label": "Engine",
+      "options": [{ "value": "rb26", "label": "RB26" }, "2JZ", "SR20"], "default": "rb26" },
+    { "id": "test", "type": "action", "label": "Play a pop", "button": "Play" }
+  ]
+}
+```
+
+| `type` | row | value |
+|---|---|---|
+| `toggle` | two states; `on` / `off` name them | `true` / `false` |
+| `range` | a bar with arrows; `min`, `max`, `step`, `unit` | a number |
+| `choice` | one of `options` at a time, arrows either side; an option is a string or `{ value, label }` | the option's `value` |
+| `action` | a button; `button` names it | none - it sends an event |
+| `section` | a heading row between groups | none |
+
+Every row takes a `label`, and may take a `description` (shown on hover). The
+values are kept by the loader, in `scripts\FRSModLoader\data\settings\<id>.json`
+- not in your folder, so an update of the mod keeps them. The mod reads them:
+
+```js
+const volume = speed.settings.get("volume");     // the value, or the default
+const all = speed.settings.all();                // every one, defaults filled in
+
+speed.on("settings", (all) => {                  // the player changed something
+  applyVolume(all.volume);
+});
+speed.on("settings:action", (e) => {             // an action row: e.id
+  if (e.id === "test") playPop();
+});
+
+speed.settings.set("volume", 60);                // from your side (a hotkey)
+```
+
+Settings decided at runtime - one row per car found in the garage, say - are
+added with `speed.settings.define([...])`, the same shape as the manifest's;
+they appear the next time the menu opens.
+
+The on/off switch is the player's: it wins over the manifest's `enabled`, and
+takes effect on the next start (a mod that is running keeps running until the
+game restarts, and the menu says so). Native `.asi` plugins show up in the same
+list by registering a manifest - see
+[NATIVE_PLUGINS.md → The Mods menu](NATIVE_PLUGINS.md#the-mods-menu).
 
 ## Console and commands
 
@@ -290,7 +366,7 @@ speed.store.car.id();            // null with no car loaded
 
 With no car loaded `get` returns the default and `set` does not write — better
 no save than a save on the wrong car. The files live in
-`scripts\SpeedLoader\data\<modid>.json`, outside `mods\`, so reinstalling the
+`scripts\FRSModLoader\data\<modid>.json`, outside `mods\`, so reinstalling the
 mod does not wipe them.
 
 ## Sound
@@ -389,13 +465,13 @@ speed.on("keydown", (e) => { if (e.key === 0x74) speed.ui.reload(true); });  // 
 `main.js` is not hot-reloaded: it runs once, on the game thread, at startup.
 Changing it means restarting the game.
 
-For the UI there is a better loop still — point `[UI] Url` in `SpeedLoader.ini`
+For the UI there is a better loop still — point `[UI] Url` in `FRSModLoader.ini`
 at your dev server (`http://localhost:5173`) and keep whatever tooling you
 normally use, hot reload included.
 
 ## Debugging
 
-- `scripts\SpeedLoader.log` — `console.log` from `main.js` lands here prefixed
+- `scripts\FRSModLoader.log` — `console.log` from `main.js` lands here prefixed
   with `js`, and so does the page's, through CEF's console hook. An exception in
   a mod is logged with its stack and does not stop the others.
 - **`console.log` also shows up on screen**, in the same panel `speed.print`
@@ -420,7 +496,7 @@ else's machine:
    not valid yet. Check before you dereference.
 3. **The mirror is not the car.** Write to physics; read from whichever is
    cheaper. See `NOTES.md`.
-4. **You are not alone.** Other `.asi` mods hook the same loop — SpeedLoader
+4. **You are not alone.** Other `.asi` mods hook the same loop — FRSModLoader
    chains instead of replacing, and a mod that patches bytes should do the same.
 5. **Namespace your own things.** Channels, command names and store keys are
    shared ground with every other mod installed.

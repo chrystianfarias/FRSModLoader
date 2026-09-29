@@ -5,6 +5,7 @@
 // the HTML's job.
 #include "Api.h"
 
+#include "game/MenuSound.h"
 #include "ui/CefHost.h"
 #include "ui/InputRouter.h"
 #include "ui/Overlay.h"
@@ -98,6 +99,17 @@ namespace
         JS_SetPropertyStr(ctx, out, "height", JS_NewInt32(ctx, h));
         return out;
     }
+
+    // speed.ui.sound(name): one of the game's menu sounds (game/MenuSound.h).
+    JSValue Sound(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        if (argc < 1) return JS_ThrowTypeError(ctx, "speed.ui.sound(name)");
+        const char* name = JS_ToCString(ctx, argv[0]);
+        if (!name) return JS_EXCEPTION;
+        const bool played = MenuSound::Play(name);
+        JS_FreeCString(ctx, name);
+        return JS_NewBool(ctx, played);
+    }
 }
 
 namespace Js
@@ -116,6 +128,7 @@ namespace Js
         JS_SetPropertyStr(ctx, ui, "reload",    JS_NewCFunction(ctx, Reload, "reload", 1));
         JS_SetPropertyStr(ctx, ui, "devtools",  JS_NewCFunction(ctx, DevTools, "devtools", 0));
         JS_SetPropertyStr(ctx, ui, "size",      JS_NewCFunction(ctx, Size, "size", 0));
+        JS_SetPropertyStr(ctx, ui, "sound",     JS_NewCFunction(ctx, Sound, "sound", 1));
 
         JS_SetPropertyStr(ctx, speed, "ui", ui);
     }

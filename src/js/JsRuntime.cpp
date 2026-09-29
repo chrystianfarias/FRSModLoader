@@ -2,6 +2,7 @@
 
 #include "Api.h"
 
+#include "host/ModSettings.h"
 #include "ui/InputRouter.h"
 #include "core/Log.h"
 
@@ -213,6 +214,29 @@ namespace Js
     const std::string& ModUi(const Mod* m)    { return m ? m->ui   : kEmpty; }
     const std::string& ModName(const Mod* m)  { return m ? m->name : kEmpty; }
 
+    bool ParseManifest(const std::string& text, const std::string& fallback,
+                       std::string* id)
+    {
+        if (!g_rt) return false;
+        JSContext* ctx = JS_NewContext(g_rt);
+        if (!ctx) return false;
+
+        JSValue meta = JS_ParseJSON(ctx, text.c_str(), text.size(), "<manifest>");
+        const bool ok = !JS_IsException(meta) && JS_IsObject(meta);
+        if (ok) *id = JsonField(ctx, meta, "id", fallback.c_str());
+        else    JS_FreeValue(ctx, JS_GetException(ctx));
+        JS_FreeValue(ctx, meta);
+        JS_FreeContext(ctx);
+        return ok && !id->empty();
+    }
+
+    bool IsRunning(const std::string& id)
+    {
+        for (size_t i = 0; i < g_mods.size(); i++)
+            if (g_mods[i]->id == id) return true;
+        return false;
+    }
+
     Mod* Load(const std::string& dir)
     {
         std::string manifestPath = dir + "\\mod.json";
@@ -248,13 +272,17 @@ namespace Js
         mod->ui   = JsonField(mod->ctx, meta, "ui", "");
 
         JSValue enabled = JS_GetPropertyStr(mod->ctx, meta, "enabled");
-        mod->enabled = JS_IsUndefined(enabled) ? true : JS_ToBool(mod->ctx, enabled) != 0;
+        const bool byDefault = JS_IsUndefined(enabled) || JS_ToBool(mod->ctx, enabled) != 0;
         JS_FreeValue(mod->ctx, enabled);
         JS_FreeValue(mod->ctx, meta);
 
+        // mod.json says what a mod does by default; the Mods menu, what the
+        // player chose.
+        mod->enabled = ModSettings::Enabled(mod->id, byDefault);
         if (!mod->enabled)
         {
-            LogJs("%s: disabled in mod.json", mod->id.c_str());
+            LogJs("%s: switched off (%s)", mod->id.c_str(),
+                  byDefault ? "Mods menu" : "mod.json");
             JS_FreeContext(mod->ctx);
             delete mod;
             return nullptr;
@@ -273,6 +301,7 @@ namespace Js
         RegisterCommands(mod->ctx, speed, mod);
         RegisterStore(mod->ctx, speed, mod);
         RegisterDraw(mod->ctx, speed, mod);
+        RegisterSettings(mod->ctx, speed, mod);
         JS_SetPropertyStr(mod->ctx, global, "speed", speed);
         JS_FreeValue(mod->ctx, global);
 

@@ -15,10 +15,13 @@
 
 #include "core/Config.h"
 #include "core/Log.h"
+#include "core/Version.h"
+#include "game/MenuSound.h"
+#include "host/ModSettings.h"
 #include "ui/CefHost.h"
 #include "ui/InputRouter.h"
 
-#include "../../sdk/speedloader.h"
+#include "../../sdk/frsmodloader.h"
 
 #include <windows.h>
 #include <deque>
@@ -36,6 +39,7 @@ namespace
         bool         visible;
         bool         mounted;   // the shell has it on screen
         bool         wantsMount;
+        unsigned     gen;       // bumped by panel_reload: the shell remounts
         bool         closing;
     };
 
@@ -137,6 +141,7 @@ namespace
         return "{\"id\":" + JsonString(p->id.c_str()) +
                ",\"name\":" + JsonString(p->id.c_str()) +
                ",\"url\":" + JsonString(p->url.c_str()) +
+               ",\"gen\":" + std::to_string(p->gen) +
                ",\"native\":true}";
     }
 
@@ -159,7 +164,7 @@ namespace
     // ------------------------------------------------------------- the table
     const char* __cdecl ApiLoaderVersion(void)
     {
-        return "0.1.0";
+        return FRSMODLOADER_VERSION;
     }
 
     SL_Panel* __cdecl ApiPanelOpen(const char* id, const char* html)
@@ -201,6 +206,7 @@ namespace
         p->mounted = false;
         p->wantsMount = true;
         p->closing = false;
+        p->gen = 0;
         g_panels.push_back(p);
 
         Log("plugin panel \"%s\" -> %s", id, abs);
@@ -258,10 +264,12 @@ namespace
 
         // Mounting again is the reload: the shell drops the old shadow root
         // and fetches the file afresh, so edited HTML shows up without a
-        // restart.
+        // restart. A new generation is what tells it apart from a mount the
+        // shell already has.
         Panel* p = (Panel*)handle;
         p->mounted = false;
         p->wantsMount = true;
+        p->gen++;
     }
 
     void __cdecl ApiPanelShow(SL_Panel* handle, int show)
@@ -299,6 +307,31 @@ namespace
         return InputRouter::IsCapturing() ? 1 : 0;
     }
 
+    SL_Mod* __cdecl ApiModRegister(const char* manifest)
+    {
+        return ModSettings::RegisterNative(manifest);
+    }
+
+    const char* __cdecl ApiModSettings(SL_Mod* mod)
+    {
+        return ModSettings::NativeValues(mod);
+    }
+
+    void __cdecl ApiModOnSettings(SL_Mod* mod, SL_MessageFn fn, void* user)
+    {
+        ModSettings::NativeOnSettings(mod, fn, user);
+    }
+
+    int __cdecl ApiModEnabled(SL_Mod* mod)
+    {
+        return ModSettings::NativeEnabled(mod);
+    }
+
+    int __cdecl ApiMenuSound(const char* name)
+    {
+        return MenuSound::Play(name) ? 1 : 0;
+    }
+
     const SL_Api g_api = {
         SL_API_VERSION,
         ApiLoaderVersion,
@@ -314,13 +347,18 @@ namespace
         ApiPrint,
         ApiCaptureInput,
         ApiCapturingInput,
+        ApiModRegister,
+        ApiModSettings,
+        ApiModOnSettings,
+        ApiModEnabled,
+        ApiMenuSound,
     };
 }
 
 // The only export. A plugin asks for the version it was built against, and a
 // newer loader is free to answer with an older table - which is why the
 // version is a parameter and not something the caller reads off the struct.
-extern "C" __declspec(dllexport) const SL_Api* __cdecl SpeedLoader_GetApi(unsigned version)
+extern "C" __declspec(dllexport) const SL_Api* __cdecl FRSModLoader_GetApi(unsigned version)
 {
     if (version > SL_API_VERSION)
     {
@@ -400,6 +438,15 @@ namespace Host
         // shell asks for the panels back when it does. Native panels are not
         // in mods.json - they exist only in this process - so this is the only
         // way they survive a reload.
+        // frsmodloader.sound(name), from any page.
+        if (id == "sl" && name == "sound")
+        {
+            // A JSON string: the name between its quotes.
+            if (json.size() > 1 && json[0] == '"')
+                MenuSound::Play(json.substr(1, json.size() - 2).c_str());
+            return true;
+        }
+
         if (id == "sl" && name == "panels")
         {
             Guard guard;

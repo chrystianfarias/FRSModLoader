@@ -40,4 +40,15 @@ namespace Js
 
     // A message from the UI, as "<modId>:<channel>". It goes only to its owner.
     void DispatchUiMessage(const std::string& channel, const std::string& json);
+
+    // A manifest's id ("id", or `fallback` when it has none). False when the
+    // text is not a JSON object - a mod.json that would not load either.
+    bool ParseManifest(const std::string& text, const std::string& fallback,
+                       std::string* id);
+    bool IsRunning(const std::string& id);
+
+    // The Mods menu changed a mod's settings (the whole object, as stored), or
+    // an "action" row was pressed ({"id": ...}). See ApiSettings.cpp.
+    void SettingsChanged(const std::string& id, const std::string& valuesJson);
+    void SettingsAction(const std::string& id, const std::string& actionJson);
 }

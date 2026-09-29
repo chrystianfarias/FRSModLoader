@@ -1,14 +1,14 @@
-# SpeedLoader - a modding platform for NFS Underground 2 (SPEED2.EXE v1.2 NTSC)
+# FRSModLoader - a modding platform for NFS Underground 2 (SPEED2.EXE v1.2 NTSC)
 #
 # Two targets, both 32-bit because they live inside the game:
-#   SpeedLoader.asi        - injected into the game: QuickJS + SDK + CEF overlay
-#   SpeedLoaderHelper.exe  - CEF's subprocess (renderer, gpu, utility)
+#   FRSModLoader.asi        - injected into the game: QuickJS + SDK + CEF overlay
+#   FRSModLoaderHelper.exe  - CEF's subprocess (renderer, gpu, utility)
 #
 # CEF comes from third_party/cef (fetch it with tools/fetch_cef.ps1).
 # QuickJS comes in through FetchContent on the first configure.
 
 cmake_minimum_required(VERSION 3.21)
-project(SpeedLoader CXX C)
+project(FRSModLoader CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,7 +21,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR
-        "SpeedLoader is 32-bit (SPEED2.EXE is x86). Configure with -A Win32 "
+        "FRSModLoader is 32-bit (SPEED2.EXE is x86). Configure with -A Win32 "
         "or use the presets: cmake --preset x86")
 endif()
 
@@ -54,7 +54,7 @@ FetchContent_Declare(quickjs
 FetchContent_MakeAvailable(quickjs)
 
 # ---------------------------------------------------------------- .asi
-set(SPEEDLOADER_SOURCES
+set(FRSMODLOADER_SOURCES
     src/dllmain.cpp
     src/js/JsRuntime.cpp
     src/js/ModHost.cpp
@@ -67,46 +67,55 @@ set(SPEEDLOADER_SOURCES
     src/js/ApiCommands.cpp
     src/js/ApiStore.cpp
     src/js/ApiDraw.cpp
+    src/js/ApiSettings.cpp
     src/core/Audio.cpp
     src/ui/D3D9Hook.cpp
     src/ui/Overlay.cpp
+    src/ui/Draw2D.cpp
+    src/ui/Splash.cpp
+    src/ui/Cursor.cpp
+    src/ui/ModsMenu.cpp
     src/ui/WorldDraw.cpp
     src/ui/CefHost.cpp
+    src/ui/GameData.cpp
+    third_party/lzma/LzmaDec.c
+    src/ui/GameTextures.cpp
     src/ui/InputRouter.cpp
     src/ui/DInputBlock.cpp
     src/bridge/Bridge.cpp
     src/host/HostApi.cpp
+    src/host/ModSettings.cpp
 )
 
-add_library(SpeedLoader SHARED ${SPEEDLOADER_SOURCES})
-set_target_properties(SpeedLoader PROPERTIES
-    OUTPUT_NAME "SpeedLoader"
+add_library(FRSModLoader SHARED ${FRSMODLOADER_SOURCES})
+set_target_properties(FRSModLoader PROPERTIES
+    OUTPUT_NAME "FRSModLoader"
     SUFFIX ".asi"
     PREFIX "")
-target_include_directories(SpeedLoader PRIVATE src "${CEF_ROOT}")
-target_link_libraries(SpeedLoader PRIVATE
+target_include_directories(FRSModLoader PRIVATE src third_party/lzma "${CEF_ROOT}")
+target_link_libraries(FRSModLoader PRIVATE
     libcef_lib libcef_dll_wrapper qjs
     d3d9 user32 gdi32 ole32 winmm)
-target_compile_definitions(SpeedLoader PRIVATE
+target_compile_definitions(FRSModLoader PRIVATE
     WIN32 _WINDOWS NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
 
-# libcef.dll does not sit next to SPEED2.EXE; it lives in the SpeedLoader
+# libcef.dll does not sit next to SPEED2.EXE; it lives in the FRSModLoader
 # folder. That is why it is delay-loaded: the .asi loads the DLL by full path
 # before the first CEF call (see CefHost.cpp).
-target_link_options(SpeedLoader PRIVATE /DELAYLOAD:libcef.dll)
-target_link_libraries(SpeedLoader PRIVATE delayimp)
+target_link_options(FRSModLoader PRIVATE /DELAYLOAD:libcef.dll)
+target_link_libraries(FRSModLoader PRIVATE delayimp)
 
-SET_LIBRARY_TARGET_PROPERTIES(SpeedLoader)
+SET_LIBRARY_TARGET_PROPERTIES(FRSModLoader)
 
 # ---------------------------------------------------------------- helper
-add_executable(SpeedLoaderHelper WIN32 helper/helper_main.cpp)
-target_include_directories(SpeedLoaderHelper PRIVATE "${CEF_ROOT}")
-target_link_libraries(SpeedLoaderHelper PRIVATE libcef_lib libcef_dll_wrapper)
-SET_EXECUTABLE_TARGET_PROPERTIES(SpeedLoaderHelper)
+add_executable(FRSModLoaderHelper WIN32 helper/helper_main.cpp)
+target_include_directories(FRSModLoaderHelper PRIVATE "${CEF_ROOT}")
+target_link_libraries(FRSModLoaderHelper PRIVATE libcef_lib libcef_dll_wrapper)
+SET_EXECUTABLE_TARGET_PROPERTIES(FRSModLoaderHelper)
 
 # ---------------------------------------------------------------- SpawnCar
-# O mod spawn-car como .asi nativo: hooka o jogo por conta propria e pega a
-# interface emprestada do SpeedLoader pelo mesmo header publico do exemplo.
+# The spawn-car mod as a native .asi: it hooks the game on its own and borrows
+# FRSModLoader's interface through the same public header as the example.
 # plugins/ is not in the repository - it is where the local .asi mods live - so
 # the target only exists on a machine that has one.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/plugins/spawn-car/SpawnCar.cpp")
@@ -118,13 +127,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/plugins/spawn-car/SpawnCar.cpp")
     target_include_directories(SpawnCar PRIVATE sdk plugins/spawn-car)
     target_compile_definitions(SpawnCar PRIVATE
         WIN32 _WINDOWS NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
-    # psapi: o plugin precisa dos limites do proprio modulo para distinguir, num
-    # breakpoint de hardware, uma escrita sua de uma escrita do jogo.
+    # psapi: the plugin needs its own module's bounds to tell, on a hardware
+    # breakpoint, a write of its own from a write by the game.
     target_link_libraries(SpawnCar PRIVATE psapi)
 endif()
 
 # ---------------------------------------------------------------- example plugin
-# A native .asi that takes its interface from SpeedLoader through sdk/speedloader.h
+# A native .asi that takes its interface from FRSModLoader through sdk/frsmodloader.h
 # and nothing else - no CEF, no QuickJS, one source file. It is also what keeps
 # the public header honest: it is compiled on every build.
 add_library(HelloPanel SHARED examples/asi-plugin/HelloPanel.cpp)

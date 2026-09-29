@@ -1,0 +1,592 @@
+<!--
+  The Mods menu: opened by "Mods", the first entry of the game's Options menu.
+
+  The entry is a real menu item, built by the engine and owned by the loader
+  (src/ui/ModsMenu.cpp); this page is what it opens. It lists every installed
+  mod - the ones switched off too - with its picture, lets the player switch
+  each on or off, and draws the settings the mod declared (in mod.json, with
+  speed.settings.define, or in a native plugin's manifest) as the game's own
+  rows: nfsu2.css, the same classes any mod can use.
+
+  From the .asi:   "open"  { version, mods: [{ id, native, running, choice,
+                                               base, manifest, values, extra }] }
+  To the .asi:     close | enable:<id> (bool) | set:<id> ({values}) |
+                   action:<id> ({ id })
+
+  A mod never draws here; it only says what it has. The values it gets back
+  are the object this page sends, whole.
+-->
+<link rel="stylesheet" href="nfsu2.css">
+<style>
+  :host { all: initial; }
+
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .6);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .15s linear, visibility .15s;
+    pointer-events: none;   /* the game's menu stays clickable while closed */
+  }
+  .backdrop.open { opacity: 1; visibility: visible; pointer-events: auto; }
+
+  /* One size for the whole menu, from the screen's height: the same page runs
+     at 768 lines and at 2160. */
+  .menu {
+    --nfs-size: clamp(12px, 1.85vh, 26px);
+    width: min(62em, 94vw);
+    outline: none;
+  }
+
+  .head-count { font-style: normal; }
+
+  .split { height: 31em; grid-template-columns: 19em 1fr; }
+  .split .nfs-split__side,
+  .split .nfs-split__main { overflow-y: auto; scrollbar-width: thin; }
+
+  /* The list: a small picture in front of each name. */
+  .thumb {
+    flex: none;
+    width: 3.2em;
+    height: 1.8em;
+    border-radius: 3px;
+    object-fit: cover;
+    background: rgba(0, 0, 0, .5);
+  }
+  .thumb.ph, .hero.ph { object-fit: contain; padding: .25em; }
+  /* The list of mods is the same options sheet as the settings: no bar on
+     any row but the selected one. */
+  .side-sheet { min-height: 100%; box-sizing: border-box; }
+  .mod-opt { grid-template-columns: 1.1em 3.2em minmax(0, 1fr); column-gap: .55em; padding-left: .55em; }
+  .mod-check { text-align: center; font-style: normal; color: var(--nfs-check); }
+  .mod-opt.nfs-option--dim .nfs-option__label { text-decoration: line-through; }
+
+  /* The selected mod. */
+  .detail { padding: .9em 1em 1em; }
+  .hero {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(0, 0, 0, .55);
+    border: 1px solid var(--nfs-edge-soft);
+  }
+  .hero.ph { padding: 1.2em; }
+  .who { display: flex; align-items: baseline; gap: .8em; margin: .55em 0 .1em; }
+  .who .nfs-title { font-size: 1.6em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail .nfs-kv { display: flex; gap: .6em; font-style: normal; }
+  .desc { margin: .3em 0 .2em; color: var(--nfs-ink-soft); line-height: 1.35; font-style: normal; }
+  .note { margin: .45em 0 0; color: var(--nfs-pin-yellow); font-size: .9em; font-style: normal; }
+  .note:empty { display: none; }
+
+  /* The settings: the game's own options sheet (nfsu2.css). */
+  .sheet { margin-top: .7em; }
+  .sheet-empty { padding: .5em .85em; color: var(--nfs-sheet-ink-soft); font-weight: 600; }
+  .empty-note { padding: .8em .2em; color: var(--nfs-ink-dim); font-style: normal; }
+
+</style>
+
+<div class="backdrop" id="backdrop">
+  <div class="nfs menu" id="menu" tabindex="-1">
+    <div class="nfs-panel">
+      <div class="nfs-panel__head">
+        <h1 class="nfs-title">Mods</h1>
+        <span class="nfs-label head-count" id="count"></span>
+      </div>
+      <div class="nfs-panel__body">
+        <div class="nfs-split split">
+          <div class="nfs-split__side">
+            <div class="nfs-sheet side-sheet"><ul class="nfs-options" id="list"></ul></div>
+          </div>
+          <div class="nfs-split__main">
+            <div class="detail" id="detail"></div>
+          </div>
+        </div>
+      </div>
+      <div class="nfs-panel__foot">
+        <button class="nfs-btn" id="back">Back</button>
+        <button class="nfs-btn" id="defaults">Restore defaults</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => root.getElementById(id);
+  const backdrop = $('backdrop'), list = $('list'), detail = $('detail');
+  const PLACEHOLDER = 'mods-icon.png';
+
+  // The game's own menu sounds (docs/UI-KIT.md, "Keyboard and sounds"), used
+  // the way the frs-world gas station uses them.
+  const sound = (name) => frsmodloader.sound(name);
+
+  let mods = [];        // as the .asi sent them, plus what the page works out
+  let sel = 0;          // selected mod
+  let zone = 'list';    // 'list' or 'opts': where the arrows go
+  let row = 0;          // selected setting, in `rows` of the selected mod
+  let rows = [];        // the selected mod's settings as drawn: [{ item, el }]
+
+  // ---- the model ---------------------------------------------------------
+  const isOpen = () => backdrop.classList.contains('open');
+
+  function enabledOf(m) {
+    if (m.choice === true || m.choice === false) return m.choice;
+    return m.manifest.enabled !== false;
+  }
+
+  function settingsOf(m) {
+    const own = Array.isArray(m.manifest.settings) ? m.manifest.settings : [];
+    return own.concat(Array.isArray(m.extra) ? m.extra : []);
+  }
+
+  function optionsOf(item) {
+    return (item.options || []).map((o) =>
+      typeof o === 'object' && o !== null ? { value: o.value, label: String(o.label ?? o.value) }
+                                          : { value: o, label: String(o) });
+  }
+
+  function valueOf(m, item) {
+    if (Object.prototype.hasOwnProperty.call(m.values, item.id)) return m.values[item.id];
+    if (item.default !== undefined) return item.default;
+    if (item.type === 'toggle') return false;
+    if (item.type === 'range') return item.min ?? 0;
+    if (item.type === 'choice') return (optionsOf(item)[0] || {}).value;
+    return undefined;
+  }
+
+  function thumbUrl(m) {
+    const t = m.manifest.thumb || 'thumb.png';
+    return /^[a-z]+:/i.test(t) ? t : m.base + String(t).replace(/\\/g, '/');
+  }
+
+  function picture(m, cls) {
+    const img = document.createElement('img');
+    img.className = cls;
+    img.alt = '';
+    img.src = thumbUrl(m);
+    img.onerror = () => { img.onerror = null; img.src = PLACEHOLDER; img.classList.add('ph'); };
+    return img;
+  }
+
+  // ---- the list ----------------------------------------------------------
+  function renderList() {
+    list.textContent = '';
+    mods.forEach((m, i) => {
+      const li = document.createElement('li');
+      li.className = 'nfs-option mod-opt' +
+                     (i === sel ? ' nfs-option--on' : '') + (enabledOf(m) ? '' : ' nfs-option--dim');
+
+      const check = document.createElement('span');
+      check.className = 'mod-check';
+      check.textContent = enabledOf(m) ? '\u2713' : '';
+
+      const name = document.createElement('span');
+      name.className = 'nfs-option__label';
+      name.textContent = m.manifest.name || m.id;
+
+      li.append(check, picture(m, 'thumb'), name);
+      // The pointer selects as the keys do: the row under it is the one lit.
+      const pick = () => {
+        if (i === sel && zone === 'list') return;
+        if (i !== sel) sound(i < sel ? 'up' : 'down');
+        if (i !== sel) select(i);
+        zone = 'list';
+        paintFocus();
+      };
+      li.addEventListener('mouseenter', pick);
+      li.addEventListener('click', pick);
+      list.appendChild(li);
+    });
+  }
+
+  function select(i) {
+    if (!mods.length) return;
+    sel = (i + mods.length) % mods.length;
+    row = 0;
+    renderList();
+    renderDetail();
+    const on = list.children[sel];
+    if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+
+  // ---- the selected mod --------------------------------------------------
+  function renderDetail() {
+    detail.textContent = '';
+    rows = [];
+    const m = mods[sel];
+    if (!m) {
+      const p = document.createElement('p');
+      p.className = 'empty-note';
+      p.textContent = 'No mods installed.';
+      detail.appendChild(p);
+      return;
+    }
+    const man = m.manifest;
+
+    detail.appendChild(picture(m, 'hero'));
+
+    const who = document.createElement('div');
+    who.className = 'who';
+    const title = document.createElement('h2');
+    title.className = 'nfs-title';
+    title.textContent = man.name || m.id;
+    const meta = document.createElement('span');
+    meta.className = 'nfs-label';
+    meta.textContent = [man.version ? 'v' + man.version : '',
+                        m.native ? 'native' : ''].filter(Boolean).join('  ·  ');
+    who.append(title, meta);
+    detail.appendChild(who);
+
+    const by = document.createElement('div');
+    by.className = 'nfs-kv';
+    const k = document.createElement('span');
+    k.className = 'nfs-kv__k';
+    k.textContent = 'Author';
+    const v = document.createElement('span');
+    v.className = 'nfs-kv__v';
+    v.textContent = man.author || 'unknown';
+    by.append(k, v);
+    detail.appendChild(by);
+
+    if (man.description) {
+      const d = document.createElement('p');
+      d.className = 'desc';
+      d.textContent = man.description;
+      detail.appendChild(d);
+    }
+
+    const note = document.createElement('p');
+    note.className = 'note';
+    if (!m.native && enabledOf(m) !== m.running)
+      note.textContent = 'Restart the game to turn this mod ' + (enabledOf(m) ? 'on' : 'off') + '.';
+    else if (m.native && m.choice !== null && m.choice !== undefined)
+      note.textContent = 'Native plugin: the change takes effect the next time the game starts.';
+    detail.appendChild(note);
+
+    const sheet = document.createElement('div');
+    sheet.className = 'nfs-sheet sheet';
+    const opts = document.createElement('ul');
+    opts.className = 'nfs-options';
+    sheet.appendChild(opts);
+    detail.appendChild(sheet);
+
+    // The switch comes first, then whatever the mod declared.
+    addRow(opts, m, { id: '\u0000enabled', type: 'toggle', label: 'Mod enabled',
+                      on: 'On', off: 'Off' });
+
+    const items = settingsOf(m);
+    if (!items.length) {
+      const li = document.createElement('li');
+      li.className = 'sheet-empty';
+      li.textContent = 'This mod has no settings.';
+      opts.appendChild(li);
+    }
+    items.forEach((item) => addRow(opts, m, item));
+
+    if (row >= rows.length) row = rows.length - 1;
+    paintFocus();
+  }
+
+  function arrow(left, onClick) {
+    const b = document.createElement('button');
+    b.className = 'nfs-arrow' + (left ? ' nfs-arrow--left' : '');
+    b.tabIndex = -1;
+    b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    b.addEventListener('animationend', () => b.classList.remove('is-pressed'));
+    return b;
+  }
+
+  // The arrow on that side of the row answers: it swells and flashes once
+  // (nfs-arrow.is-pressed). Taken off and put back so a quick second press
+  // plays it again.
+  function pressArrow(li, dir) {
+    const b = li && li.querySelector(dir < 0 ? '.nfs-arrow--left' : '.nfs-arrow:not(.nfs-arrow--left)');
+    if (!b) return;
+    b.classList.remove('is-pressed');
+    void b.offsetWidth;
+    b.classList.add('is-pressed');
+  }
+
+  function addRow(opts, m, item) {
+    const li = document.createElement('li');
+
+    if (item.type === 'section') {
+      li.className = 'nfs-option nfs-option--head';
+      li.textContent = item.label || '';
+      opts.appendChild(li);
+      return;
+    }
+
+    li.className = 'nfs-option';
+    if (item.description) li.title = item.description;
+    const index = rows.length;
+    rows.push({ item, el: li });
+
+    const label = document.createElement('span');
+    label.className = 'nfs-option__label';
+    label.textContent = item.label || item.id;
+
+    const value = document.createElement('span');
+    value.className = 'nfs-option__value';
+    if (item.type === 'range') {
+      const track = document.createElement('div');
+      track.className = 'nfs-track';
+      track.innerHTML = '<div class="nfs-track__fill"></div>';
+      value.appendChild(track);
+    }
+    const v = document.createElement('span');
+    v.className = 'val';
+    value.appendChild(v);
+
+    if (item.type === 'action') {
+      // A button, not a value: nothing to step through, so no arrows.
+      v.textContent = item.button || 'Run';
+      li.append(label, document.createElement('span'), value, document.createElement('span'));
+      li.addEventListener('click', () => { focusRow(index); press(item); });
+    } else {
+      li.append(label,
+                arrow(true,  () => { focusRow(index); step(item, -1); }),
+                value,
+                arrow(false, () => { focusRow(index); step(item, +1); }));
+      li.addEventListener('click', () => { focusRow(index); step(item, +1); });
+    }
+
+    // The pointer selects as the keys do: the row under it is the one lit,
+    // with the same sound a key would make.
+    li.addEventListener('mouseenter', () => {
+      if (zone === 'opts' && row === index) return;
+      sound(zone === 'opts' && index < row ? 'up' : 'down');
+      focusRow(index);
+    });
+
+    // Everything but the switch dims with the mod off: it still can be set,
+    // for when it is back on.
+    if (item.id !== '\u0000enabled' && !enabledOf(m)) li.classList.add('nfs-option--dim');
+    opts.appendChild(li);
+    paintValue(m, item, li);
+  }
+
+  function paintValue(m, item, li) {
+    const v = li.querySelector('.val');
+    if (!v || item.type === 'action') return;
+
+    if (item.id === '\u0000enabled') {
+      v.textContent = enabledOf(m) ? item.on : item.off;
+      return;
+    }
+    const value = valueOf(m, item);
+    if (item.type === 'toggle') {
+      v.textContent = value ? (item.on || 'On') : (item.off || 'Off');
+    } else if (item.type === 'range') {
+      const min = item.min ?? 0, max = item.max ?? 100;
+      const digits = String(item.step ?? 1).split('.')[1]?.length || 0;
+      v.textContent = Number(value).toFixed(digits) + (item.unit || '');
+      const track = li.querySelector('.nfs-track');
+      if (track) track.style.setProperty('--value', max > min ? (value - min) / (max - min) : 0);
+    } else if (item.type === 'choice') {
+      const o = optionsOf(item).find((o) => o.value === value);
+      v.textContent = o ? o.label : String(value ?? '');
+    } else {
+      v.textContent = String(value ?? '');
+    }
+  }
+
+  // ---- changing things ---------------------------------------------------
+  function step(item, dir) {
+    const m = mods[sel];
+    if (!m) return;
+    const r0 = rows.find((r) => r.item === item);
+    if (r0) pressArrow(r0.el, dir);
+
+    if (item.id === '\u0000enabled') {
+      sound(dir < 0 ? 'valueLeft' : 'valueRight');
+      m.choice = !enabledOf(m);
+      frsmodloader.send('enable:' + m.id, m.choice);
+      const keepRow = row;
+      renderList();
+      renderDetail();
+      focusRow(keepRow);
+      // The row was drawn anew: its arrow answers the press from here.
+      if (rows[row]) pressArrow(rows[row].el, dir);
+      return;
+    }
+
+    const now = valueOf(m, item);
+    let next = now;
+    if (item.type === 'toggle') {
+      next = !now;
+    } else if (item.type === 'range') {
+      const min = item.min ?? 0, max = item.max ?? 100, s = item.step ?? 1;
+      next = Math.min(max, Math.max(min, Math.round((Number(now) + dir * s) / s) * s));
+      next = Number(next.toFixed(6));
+    } else if (item.type === 'choice') {
+      const opts = optionsOf(item);
+      if (!opts.length) return;
+      const at = opts.findIndex((o) => o.value === now);
+      next = opts[((at < 0 ? 0 : at) + dir + opts.length) % opts.length].value;
+    } else {
+      return;
+    }
+    // A range already at its end does not move: that is the game's "no".
+    if (next === now) { sound('wrong'); return; }
+    sound(dir < 0 ? 'valueLeft' : 'valueRight');
+
+    m.values = Object.assign({}, m.values, { [item.id]: next });
+    frsmodloader.send('set:' + m.id, m.values);
+    const r = rows.find((r) => r.item === item);
+    if (r) paintValue(m, item, r.el);
+  }
+
+  function press(item) {
+    const m = mods[sel];
+    if (!m) return;
+    if (item.type === 'action') {
+      sound('confirm');
+      frsmodloader.send('action:' + m.id, { id: item.id });
+      const r = rows.find((r) => r.item === item);
+      if (r) { r.el.classList.add('nfs-option--dim'); setTimeout(() => r.el.classList.remove('nfs-option--dim'), 140); }
+    } else {
+      step(item, +1);
+    }
+  }
+
+  function restoreDefaults() {
+    const m = mods[sel];
+    if (!m) return;
+    sound('confirm');
+    m.values = {};
+    frsmodloader.send('set:' + m.id, m.values);
+    renderDetail();
+  }
+
+  // ---- focus: the game's way of driving a menu, arrows and Enter ---------
+  function focusRow(i) {
+    if (!rows.length) return;
+    row = Math.max(0, Math.min(rows.length - 1, i));
+    zone = 'opts';
+    paintFocus();
+  }
+
+  function paintFocus() {
+    rows.forEach((r, i) => r.el.classList.toggle('nfs-option--on', zone === 'opts' && i === row));
+    // Only the list the arrows are driving breathes (nfsu2.css, "pulses").
+    list.classList.toggle('is-focus', zone === 'list');
+    const opts = detail.querySelector('.nfs-options');
+    if (opts) opts.classList.toggle('is-focus', zone === 'opts');
+    const r = rows[row];
+    if (zone === 'opts' && r) r.el.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Keys by their Windows key code, as the gas station reads them: the loader
+  // hands Chromium the virtual key, and e.code comes through empty. Auto-
+  // repeat is not marked either, so a key counts once when it goes down and
+  // again only after it has come up - which also keeps the Enter that chose
+  // "Mods" in the game's menu, if still held, from doing anything here.
+  const VK = { BACK: 8, ENTER: 13, ESC: 27, SPACE: 32, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40 };
+  const held = new Set();
+  // The Enter that chose "Mods" in the game's menu, if still held, repeats
+  // into the page once it has the keyboard; for a moment after opening a
+  // confirm is taken for that and not for a choice.
+  let openedAt = 0;
+
+  function moveList(step) {
+    sound(step < 0 ? 'up' : 'down');
+    select(sel + step);
+  }
+
+  function moveRow(step) {
+    sound(step < 0 ? 'up' : 'down');
+    focusRow(row + step);
+  }
+
+  function back() {
+    if (zone === 'opts') { sound('left'); zone = 'list'; paintFocus(); }
+    else close();
+  }
+
+  // This copy of the page may have been replaced (a reload): the window is
+  // shared, and a copy that is gone must not answer keys any more.
+  const alive = () => root.host.isConnected;
+
+  window.addEventListener('keydown', (e) => {
+    if (!alive() || !isOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const k = e.keyCode;
+    if (held.has(k)) return;
+    held.add(k);
+    if ((k === VK.ENTER || k === VK.SPACE) && performance.now() - openedAt < 300) return;
+
+    if (k === VK.ESC || k === VK.BACK) { back(); return; }
+    if (!mods.length) return;
+
+    if (zone === 'list') {
+      if (k === VK.UP) moveList(-1);
+      else if (k === VK.DOWN) moveList(1);
+      else if (k === VK.RIGHT || k === VK.ENTER || k === VK.SPACE) { sound('down'); focusRow(0); }
+      else if (k === VK.LEFT) sound('left');
+    } else {
+      const r = rows[row];
+      if (k === VK.UP) moveRow(-1);
+      else if (k === VK.DOWN) moveRow(1);
+      else if (!r) return;
+      else if (k === VK.ENTER || k === VK.SPACE) press(r.item);
+      else if (r.item.type === 'action') { if (k === VK.LEFT) back(); }
+      else if (k === VK.LEFT) step(r.item, -1);
+      else if (k === VK.RIGHT) step(r.item, +1);
+    }
+  });
+  window.addEventListener('keyup', (e) => { if (alive()) held.delete(e.keyCode); });
+  window.addEventListener('blur', () => held.clear());
+
+  // Keys reach the page only while something in it has focus; the menu takes
+  // it when it opens, and takes it back whenever it wanders off.
+  const menu = $('menu');
+  menu.addEventListener('focusout', () => {
+    if (isOpen()) setTimeout(() => { if (isOpen()) menu.focus({ preventScroll: true }); }, 0);
+  });
+
+  // ---- open / close ------------------------------------------------------
+  function close() {
+    if (!isOpen()) return;
+    sound('close');
+    backdrop.classList.remove('open');
+    held.clear();
+    frsmodloader.send('close');
+  }
+
+  frsmodloader.on('open', (d) => {
+    const keep = mods[sel] && mods[sel].id;
+    mods = ((d && d.mods) || []).map((m) => Object.assign(m, {
+      manifest: m.manifest && typeof m.manifest === 'object' ? m.manifest : {},
+      values: m.values && typeof m.values === 'object' ? m.values : {},
+    }));
+    mods.sort((a, b) => String(a.manifest.name || a.id).localeCompare(String(b.manifest.name || b.id)));
+
+    const on = mods.filter(enabledOf).length;
+    $('count').textContent = (d && d.version ? 'FRSModLoader v' + d.version + '  ·  ' : '') +
+                             on + ' of ' + mods.length + ' enabled';
+
+    sel = Math.max(0, mods.findIndex((m) => m.id === keep));
+    zone = 'list';
+    row = 0;
+    renderList();
+    renderDetail();
+    held.clear();
+    openedAt = performance.now();
+    backdrop.classList.add('open');
+    menu.focus({ preventScroll: true });
+  });
+
+  $('back').addEventListener('click', close);
+  $('defaults').addEventListener('click', restoreDefaults);
+  // A click on the dark around the panel closes it, like Esc.
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+  frsmodloader.send('ready');
+</script>
