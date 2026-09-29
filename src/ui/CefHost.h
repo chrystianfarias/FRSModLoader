@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-// SpeedLoader's Chromium layer: an off-screen browser inside the game process.
+// FRSModLoader's Chromium layer: an off-screen browser inside the game process.
 // CEF paints into memory (OnPaint) and Overlay is what puts that on screen, on
 // the game thread, inside EndScene.
 //
@@ -14,7 +14,7 @@
 namespace CefHost
 {
     // Called when the UI sends something to the native side
-    // (speedloader.send). It arrives on the CEF thread; dispatching it to mod
+    // (frsmodloader.send). It arrives on the CEF thread; dispatching it to mod
     // JS is the Bridge queue's job, on the game thread.
     typedef std::function<void(const std::string& channel,
                                const std::string& json)> MessageFn;
@@ -34,6 +34,10 @@ namespace CefHost
     // changed since the last call. CEF cannot paint between Lock and Unlock.
     bool LockFrame(const void** pixels, int* width, int* height);
     void UnlockFrame();
+
+    // How opaque the latest frame is at (x, y), 0-255: whether the page has
+    // something there or the game shows through. Any thread.
+    int AlphaAt(int x, int y);
 
     // Input, forwarded by InputRouter. Coordinates in window pixels.
     void MouseMove(int x, int y, bool leftDown);

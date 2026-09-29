@@ -1,12 +1,17 @@
 #include "CefHost.h"
 
+#include "GameData.h"
+#include "GameTextures.h"
 #include "core/Config.h"
 #include "core/Log.h"
 
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_parser.h"
 #include "include/cef_render_handler.h"
+#include "include/cef_resource_handler.h"
+#include "include/cef_scheme.h"
 
 #include <vector>
 
@@ -79,6 +84,15 @@ namespace
             LeaveCriticalSection(&g_frameLock);
         }
 
+        // The pointer over the page is the game's, drawn by Cursor. Left to
+        // itself, CEF would SetCursor Windows' arrow (or a hand, or an
+        // I-beam) on top of it.
+        bool OnCursorChange(CefRefPtr<CefBrowser>, CefCursorHandle,
+                            cef_cursor_type_t, const CefCursorInfo&) override
+        {
+            return true;
+        }
+
         // ---- lifetime ----
         void OnAfterCreated(CefRefPtr<CefBrowser> browser) override
         {
@@ -131,6 +145,86 @@ namespace
     CefRefPtr<Client> g_client;
 
     // ------------------------------------------------------------------
+    // http://nfsu2.tex/<NAME> - the game's own textures, read out of its packs
+    // by GameTextures. A page that wants the pill button asks for it by the
+    // name the game uses, and gets the pixels the game draws.
+    //
+    // The response owns its bytes, so nothing outside has to outlive it.
+    class TextureResponse : public CefResourceHandler
+    {
+    public:
+        TextureResponse(bool found, std::string body, std::string mime)
+            : found_(found), body_(std::move(body)), mime_(std::move(mime)) {}
+
+        bool Open(CefRefPtr<CefRequest>, bool& handleRequest,
+                  CefRefPtr<CefCallback>) override
+        {
+            handleRequest = true;
+            return true;
+        }
+
+        void GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t& length,
+                                CefString&) override
+        {
+            response->SetStatus(found_ ? 200 : 404);
+            response->SetStatusText(found_ ? "OK" : "Not Found");
+            response->SetMimeType(mime_);
+            // The page is file://, so every fetch here is cross-origin, and
+            // mask-image and canvas both insist on CORS for that.
+            response->SetHeaderByName("Access-Control-Allow-Origin", "*", true);
+            length = (int64_t)body_.size();
+        }
+
+        bool Read(void* out, int bytesToRead, int& bytesRead,
+                  CefRefPtr<CefResourceReadCallback>) override
+        {
+            size_t n = body_.size() - offset_;
+            if (n > (size_t)bytesToRead) n = (size_t)bytesToRead;
+            memcpy(out, body_.data() + offset_, n);
+            offset_ += n;
+            bytesRead = (int)n;
+            return n > 0;
+        }
+
+        void Cancel() override {}
+
+    private:
+        bool        found_;
+        std::string body_, mime_;
+        size_t      offset_ = 0;
+        IMPLEMENT_REFCOUNTING(TextureResponse);
+    };
+
+    // http://nfsu2.tex/ serves textures and http://nfsu2.data/ the map data
+    // (GameData): same response, a different reader behind each host.
+    class TextureScheme : public CefSchemeHandlerFactory
+    {
+    public:
+        typedef bool (*Getter)(const std::string&, std::string*, std::string*);
+        explicit TextureScheme(Getter get) : get_(get) {}
+
+        CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
+                                             const CefString&,
+                                             CefRefPtr<CefRequest> request) override
+        {
+            CefURLParts parts;
+            if (!CefParseURL(request->GetURL(), parts)) return nullptr;
+            std::string path = CefString(&parts.path).ToString();
+            std::string query = CefString(&parts.query).ToString();
+            if (!query.empty()) path += "?" + query;
+
+            std::string body, mime = "text/plain";
+            bool found = get_(path, &body, &mime);
+            if (!found) { body = "not found"; mime = "text/plain"; }
+            return new TextureResponse(found, std::move(body), std::move(mime));
+        }
+
+    private:
+        Getter get_;
+        IMPLEMENT_REFCOUNTING(TextureScheme);
+    };
+
+    // ------------------------------------------------------------------
     class App : public CefApp, public CefBrowserProcessHandler
     {
     public:
@@ -173,11 +267,11 @@ namespace CefHost
         g_viewW = width;
         g_viewH = height;
 
-        // libcef.dll lives in the SpeedLoader folder, not next to SPEED2.EXE.
+        // libcef.dll lives in the FRSModLoader folder, not next to SPEED2.EXE.
         // It is delay-loaded (see CMakeLists) precisely so it can be loaded
         // here, by full path, before the first CEF call.
         char path[MAX_PATH];
-        Config::Resolve("SpeedLoader\\libcef.dll", path, sizeof(path));
+        Config::Resolve("FRSModLoader\\libcef.dll", path, sizeof(path));
 
         // LOAD_WITH_ALTERED_SEARCH_PATH makes the DLL's own folder the search
         // root. Without it, Windows would look for chrome_elf.dll next to
@@ -199,16 +293,16 @@ namespace CefHost
         settings.log_severity = LOGSEVERITY_WARNING;
 
         char buf[MAX_PATH];
-        Config::Resolve("SpeedLoader\\SpeedLoaderHelper.exe", buf, sizeof(buf));
+        Config::Resolve("FRSModLoader\\FRSModLoaderHelper.exe", buf, sizeof(buf));
         CefString(&settings.browser_subprocess_path) = buf;
-        Config::Resolve("SpeedLoader", buf, sizeof(buf));
+        Config::Resolve("FRSModLoader", buf, sizeof(buf));
         CefString(&settings.resources_dir_path) = buf;
-        Config::Resolve("SpeedLoader\\locales", buf, sizeof(buf));
+        Config::Resolve("FRSModLoader\\locales", buf, sizeof(buf));
         CefString(&settings.locales_dir_path) = buf;
-        Config::Resolve("SpeedLoader\\cef_cache", buf, sizeof(buf));
+        Config::Resolve("FRSModLoader\\cef_cache", buf, sizeof(buf));
         CefString(&settings.root_cache_path) = buf;
         CefString(&settings.cache_path) = buf;
-        Config::Resolve("SpeedLoaderCef.log", buf, sizeof(buf));
+        Config::Resolve("FRSModLoaderCef.log", buf, sizeof(buf));
         CefString(&settings.log_file) = buf;
 
         if (!CefInitialize(args, settings, new App(), nullptr))
@@ -217,6 +311,11 @@ namespace CefHost
             return false;
         }
         LogCef("CEF initialised");
+
+        // http is a standard scheme, so a factory for one host is all it takes:
+        // no custom scheme to register in every subprocess.
+        CefRegisterSchemeHandlerFactory("http", "nfsu2.tex", new TextureScheme(GameTextures::Get));
+        CefRegisterSchemeHandlerFactory("http", "nfsu2.data", new TextureScheme(GameData::Get));
 
         CefWindowInfo windowInfo;
         windowInfo.SetAsWindowless(NULL);
@@ -274,7 +373,7 @@ namespace CefHost
     {
         if (!g_browser) return;
         CefWindowInfo info;
-        info.SetAsPopup(NULL, "SpeedLoader DevTools");
+        info.SetAsPopup(NULL, "FRSModLoader DevTools");
         CefBrowserSettings settings;
         g_browser->GetHost()->ShowDevTools(info, nullptr, settings, CefPoint());
     }
@@ -302,6 +401,17 @@ namespace CefHost
         *width = g_frameW;
         *height = g_frameH;
         return true;   // stays locked until UnlockFrame
+    }
+
+    int AlphaAt(int x, int y)
+    {
+        int alpha = 0;
+        EnterCriticalSection(&g_frameLock);
+        if (x >= 0 && y >= 0 && x < g_frameW && y < g_frameH &&
+            g_frame.size() >= (size_t)g_frameW * g_frameH * 4)
+            alpha = g_frame[((size_t)y * g_frameW + x) * 4 + 3];
+        LeaveCriticalSection(&g_frameLock);
+        return alpha;
     }
 
     void UnlockFrame()
