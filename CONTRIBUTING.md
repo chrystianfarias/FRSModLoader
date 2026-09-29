@@ -35,7 +35,7 @@ Point the installer somewhere else with `.\install.ps1 -Game "D:\Games\NFSU2"`.
 
 - **One subject per PR.** A mod, a fix, a documented address — not three.
 - **Say how you tested it.** Which game version, which scene, what you saw.
-  `SpeedLoader.log` excerpts help; a screenshot helps more for UI.
+  `FRSModLoader.log` excerpts help; a screenshot helps more for UI.
 - **Game addresses come with evidence.** A new address in `src/game` or in a
   mod needs a note in `NOTES.md` saying how you found it and what it holds.
   An address without provenance is a crash waiting for someone else.
@@ -51,6 +51,6 @@ Point the installer somewhere else with `.\install.ps1 -Game "D:\Games\NFSU2"`.
 ## Reporting a bug
 
 Include the game version and executable size (this targets `SPEED2.EXE` v1.2
-NTSC, 4,800,512 bytes), your `SpeedLoader.ini`, the relevant part of
-`scripts\SpeedLoader.log`, and which other `.asi` mods you have installed —
+NTSC, 4,800,512 bytes), your `FRSModLoader.ini`, the relevant part of
+`scripts\FRSModLoader.log`, and which other `.asi` mods you have installed —
 most of the interesting failures are a conflict in the main loop.

@@ -24,7 +24,7 @@ if ((Test-Path $stamp) -and -not $Force) {
 }
 
 $base = "https://github.com/ThirteenAG/Ultimate-ASI-Loader"
-$tmp = Join-Path $env:TEMP "speedloader_asiloader"
+$tmp = Join-Path $env:TEMP "frsmodloader_asiloader"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $archive = Join-Path $tmp "Ultimate-ASI-Loader-NoPDB.zip"
 

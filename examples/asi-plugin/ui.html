@@ -1,6 +1,6 @@
 <!--
   The page for HelloPanel.asi. It is a fragment, not a document: it is mounted
-  into its own shadow root with `speedloader`, `root` and `mod` in scope - the
+  into its own shadow root with `frsmodloader`, `root` and `mod` in scope - the
   same thing a JavaScript mod's page gets, because as far as the shell is
   concerned there is no difference.
 -->
@@ -49,10 +49,10 @@
   const title = root.getElementById('title');
   const uptime = root.getElementById('uptime');
 
-  speedloader.on('title', (t) => { title.textContent = t; });
-  speedloader.on('uptime', (s) => { uptime.textContent = s.toFixed(1); });
+  frsmodloader.on('title', (t) => { title.textContent = t; });
+  frsmodloader.on('uptime', (s) => { uptime.textContent = s.toFixed(1); });
 
   // The native side is already running when this page mounts, so the page is
   // the one that says hello.
-  speedloader.send('ready');
+  frsmodloader.send('ready');
 </script>

@@ -1,14 +1,14 @@
-// SpeedLoader SDK types, for editor completion.
+// FRSModLoader SDK types, for editor completion.
 //
 // In a mod's main.js (QuickJS, inside the game):
-//   /// <reference path="../../sdk/speedloader.d.ts" />
+//   /// <reference path="../../sdk/frsmodloader.d.ts" />
 //
 // An address is always a `number`: the game is 32-bit, so any pointer fits in a
 // double without loss. `null` means "cannot read right now" - the object does
 // not exist yet, the pointer is null, or the memory is not mapped.
 
 declare namespace speed {
-    /** SpeedLoader version. */
+    /** FRSModLoader version. */
     const version: string;
 
     /** The mod currently running. */
@@ -20,7 +20,7 @@ declare namespace speed {
     };
 
     /**
-     * Everything SpeedLoader has loaded, in load order.
+     * Everything FRSModLoader has loaded, in load order.
      *
      * Called from the top level of your own main.js it returns a partial list:
      * your mod is in it, but whoever loads after you is not there yet. From a
@@ -92,20 +92,20 @@ declare namespace speed {
         function window(): number | null;
 
         /** A live read of the car mirror, or null outside a race. */
-        /** O id do carro da carreira em uso, ou null fora dela. */
+        /** The id of the career car in use, or null outside a career. */
         function carId(): number | null;
 
         /**
-         * O nome do modelo: "350Z", "RX8", "SKYLINE".
+         * The model name: "350Z", "RX8", "SKYLINE".
          *
-         * Vem da busca que o próprio jogo faz (0x610130): o carro da garagem
-         * guarda um HASH de tipo, e a tabela de modelos é procurada por ele —
-         * não indexada. Tratar o número como índice faz um 350Z se apresentar
-         * como "MIATA".
+         * It comes from the game's own lookup (0x610130): the garage car
+         * holds a type HASH, and the model table is searched by it — not
+         * indexed. Treating the number as an index makes a 350Z present
+         * itself as "MIATA".
          *
-         * Serve de chave para dados por modelo (tanque, consumo, preparação),
-         * e é melhor que o índice: um mod que mude a lista de carros embaralha
-         * índices, mas uma tabela por nome continua válida.
+         * It works as a key for per-model data (tank, consumption, tuning),
+         * and it beats the index: a mod that changes the car list shuffles
+         * indices, but a table keyed by name stays valid.
          */
         function carModel(): string | null;
 
@@ -271,31 +271,31 @@ declare namespace speed {
      *   speed.audio.play(pop, { volume: 0.8, pitch: 1.1 });
      */
     namespace store {
-        /** Lê um valor do mod; `fallback` quando não existe. */
+        /** Reads one of the mod's values; `fallback` when it does not exist. */
         function get(key: string, fallback?: any): any;
-        /** Grava e persiste na hora. */
+        /** Writes and persists right away. */
         function set(key: string, value: any): void;
         function all(): any;
         function clear(): void;
 
         /**
-         * O mesmo, mas POR CARRO da carreira.
+         * The same, but PER CAREER CAR.
          *
-         * A chave é o id que o jogo usa para o carro em uso (0x863480), e não
-         * um índice de garagem: ele sobrevive à garagem ser reordenada, e vale
-         * no menu tanto quanto na corrida.
+         * The key is the id the game uses for the car in use (0x863480), not
+         * a garage index: it survives the garage being reordered, and it is
+         * valid in the menu as much as in a race.
          *
-         *   speed.store.car.set("odometro", 1240.5);
-         *   const km = speed.store.car.get("odometro", 0);
+         *   speed.store.car.set("odometer", 1240.5);
+         *   const km = speed.store.car.get("odometer", 0);
          *
-         * Sem carro carregado (menu principal antes do save), `get` devolve o
-         * padrão e `set` não grava — melhor não guardar do que guardar no carro
-         * errado.
+         * With no car loaded (main menu before a save), `get` returns the
+         * fallback and `set` does not write — better not to save at all than
+         * to save to the wrong car.
          */
         namespace car {
             function get(key: string, fallback?: any): any;
             function set(key: string, value: any): boolean;
-            /** O id do carro em uso, ou null. */
+            /** The id of the car in use, or null. */
             function id(): number | null;
         }
     }
@@ -364,7 +364,49 @@ declare namespace speed {
         function devtools(): void;
         /** Layer size, in backbuffer pixels. */
         function size(): { width: number; height: number };
+
+        /**
+         * One of the game's own menu sounds, by what it is for. False when
+         * the frontend has no audio yet. A page plays them itself with
+         * `frsmodloader.sound(name)`; see docs/UI-KIT.md, "Keyboard and sounds".
+         */
+        function sound(name: MenuSound): boolean;
     }
+
+    type MenuSound = "up" | "down" | "left" | "right" | "valueLeft" | "valueRight" |
+                     "confirm" | "open" | "close" | "wrong";
+
+    // --------------------------------------------------------------- settings
+    /**
+     * The mod's options, as the player set them in Options > Mods. They are
+     * declared in mod.json ("settings": [...]) and drawn by the loader; the
+     * mod only reads them. See docs/MODDING.md, "Settings and the Mods menu".
+     *
+     *   const volume = speed.settings.get("volume");
+     *   speed.on("settings", (all) => apply(all));
+     *   speed.on("settings:action", (e) => { if (e.id === "test") play(); });
+     */
+    namespace settings {
+        /** The value, or the declared default, or `fallback`. */
+        function get(id: string, fallback?: any): any;
+        /** Every value, defaults filled in. */
+        function all(): Record<string, any>;
+        /** Changes one from the mod's side (a hotkey); stored, not announced. */
+        function set(id: string, value: any): void;
+        /** More rows, decided at runtime; shown the next time the menu opens. */
+        function define(items: Setting[]): void;
+    }
+
+    type Setting =
+        | { type: "section"; label: string }
+        | { id: string; type: "toggle"; label: string; default?: boolean;
+            on?: string; off?: string; description?: string }
+        | { id: string; type: "range"; label: string; min: number; max: number;
+            step?: number; unit?: string; default?: number; description?: string }
+        | { id: string; type: "choice"; label: string;
+            options: (string | number | { value: any; label: string })[];
+            default?: any; description?: string }
+        | { id: string; type: "action"; label: string; button?: string; description?: string };
 }
 
 declare function setTimeout(fn: () => void, ms?: number): number;

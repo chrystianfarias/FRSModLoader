@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Configuration read from SpeedLoader.ini, next to the .asi (the game's
+// Configuration read from FRSModLoader.ini, next to the .asi (the game's
 // scripts\ folder).
 namespace Config
 {
@@ -65,7 +65,7 @@ namespace Config
     inline const char* OwnDir() { return g_ownDir; }
 
     // Absolute path of something next to the .asi: Resolve("mods") gives
-    // "<game>\scripts\SpeedLoader\mods" when `sub` is relative.
+    // "<game>\scripts\FRSModLoader\mods" when `sub` is relative.
     inline void Resolve(const char* sub, char* out, DWORD outSize)
     {
         if (sub && (sub[1] == ':' || sub[0] == '\\'))

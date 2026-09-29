@@ -23,7 +23,7 @@ if ((Test-Path $stamp) -and -not $Force) {
 # The file name travels url-encoded; '+' has to become %2B.
 $name = "cef_binary_${Version}_windows32_minimal.tar.bz2"
 $url = "https://cef-builds.spotifycdn.com/" + $name.Replace("+", "%2B")
-$tmp = Join-Path $env:TEMP "speedloader_cef"
+$tmp = Join-Path $env:TEMP "frsmodloader_cef"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $archive = Join-Path $tmp $name
 

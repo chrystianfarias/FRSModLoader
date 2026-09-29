@@ -4,13 +4,13 @@
 #include "include/cef_v8.h"
 #include <string>
 
-// The renderer side of the bridge. Runs in SpeedLoaderHelper.exe, not in the
+// The renderer side of the bridge. Runs in FRSModLoaderHelper.exe, not in the
 // game.
 //
-// It injects `window.speedloader` into the page:
+// It injects `window.frsmodloader` into the page:
 //
-//   speedloader.send(channel, data)   -> reaches the mod's JS (QuickJS, in-game)
-//   speedloader.on(channel, cb)       <- receives whatever the mod sends
+//   frsmodloader.send(channel, data)   -> reaches the mod's JS (QuickJS, in-game)
+//   frsmodloader.on(channel, cb)       <- receives whatever the mod sends
 //
 // The return path is a process message that CefHost hands to the mod.
 
@@ -27,7 +27,7 @@ public:
                  const CefV8ValueList& args, CefRefPtr<CefV8Value>&,
                  CefString&) override
     {
-        if (name != "__speedloader_send" || args.size() < 2) return false;
+        if (name != "__frsmodloader_send" || args.size() < 2) return false;
 
         CefRefPtr<CefV8Context> ctx = CefV8Context::GetCurrentContext();
         CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(SL_MSG_TO_MOD);
@@ -52,8 +52,8 @@ public:
                           CefRefPtr<CefV8Context> context) override
     {
         CefRefPtr<CefV8Value> global = context->GetGlobal();
-        global->SetValue("__speedloader_send",
-                         CefV8Value::CreateFunction("__speedloader_send",
+        global->SetValue("__frsmodloader_send",
+                         CefV8Value::CreateFunction("__frsmodloader_send",
                                                     new SlV8Send()),
                          V8_PROPERTY_ATTRIBUTE_DONTENUM);
 
@@ -62,24 +62,24 @@ public:
         frame->ExecuteJavaScript(
             "(function(){"
             "  var handlers = {};"
-            "  window.speedloader = {"
+            "  window.frsmodloader = {"
             "    send: function(channel, data){"
-            "      __speedloader_send(String(channel), JSON.stringify(data === undefined ? null : data));"
+            "      __frsmodloader_send(String(channel), JSON.stringify(data === undefined ? null : data));"
             "    },"
             "    on: function(channel, cb){"
             "      (handlers[channel] || (handlers[channel] = [])).push(cb);"
-            "      return function(){ speedloader.off(channel, cb); };"
+            "      return function(){ frsmodloader.off(channel, cb); };"
             "    },"
             "    off: function(channel, cb){"
             "      var a = handlers[channel]; if(!a) return;"
             "      var i = a.indexOf(cb); if(i >= 0) a.splice(i, 1);"
             "    }"
             "  };"
-            "  window.__speedloader_dispatch = function(channel, json){"
+            "  window.__frsmodloader_dispatch = function(channel, json){"
             "    var data; try { data = JSON.parse(json); } catch(e) { data = null; }"
             "    var a = handlers[channel] || [];"
             "    for (var i = 0; i < a.length; i++) {"
-            "      try { a[i](data); } catch(e) { console.error('[speedloader]', e); }"
+            "      try { a[i](data); } catch(e) { console.error('[frsmodloader]', e); }"
             "    }"
             "  };"
             "})();",
@@ -96,7 +96,7 @@ public:
         if (!ctx || !ctx->Enter()) return true;
 
         CefRefPtr<CefV8Value> fn =
-            ctx->GetGlobal()->GetValue("__speedloader_dispatch");
+            ctx->GetGlobal()->GetValue("__frsmodloader_dispatch");
         if (fn && fn->IsFunction())
         {
             CefV8ValueList args;

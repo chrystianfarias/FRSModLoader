@@ -21,7 +21,7 @@ inline void LogTag(const char* tag, const char* fmt, ...)
 
     if (!f)
     {
-        f = fopen("SpeedLoader.log", "w");
+        f = fopen("FRSModLoader.log", "w");
         t0 = GetTickCount();
     }
     if (f)

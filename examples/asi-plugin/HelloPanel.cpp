@@ -1,7 +1,7 @@
 // HelloPanel - a native .asi mod with an HTML interface, and no JavaScript.
 //
 // It is the smallest thing that shows the whole shape of the host API: connect
-// to SpeedLoader, open a panel, push numbers into it, and answer what the page
+// to FRSModLoader, open a panel, push numbers into it, and answer what the page
 // sends back. Build it with the project (target HelloPanel), then put
 // HelloPanel.asi in the game's scripts\ folder and ui.html in
 // scripts\HelloPanel\.
@@ -9,11 +9,11 @@
 // A real mod would drive this from the game loop it already hooks. This one
 // runs a thread of its own instead, precisely because it is worth showing that
 // the calls are safe from anywhere: only the callback is pinned to the game
-// thread, and SpeedLoader is the one that pins it.
+// thread, and FRSModLoader is the one that pins it.
 #include <windows.h>
 #include <stdio.h>
 
-#include "speedloader.h"
+#include "frsmodloader.h"
 
 namespace
 {
@@ -36,7 +36,7 @@ namespace
 
     DWORD WINAPI Run(LPVOID)
     {
-        // SpeedLoader may load after us, and its UI comes up a second into the
+        // FRSModLoader may load after us, and its UI comes up a second into the
         // game: keep asking until it answers.
         while (!(g_sl = SL_Connect())) Sleep(250);
 
@@ -54,7 +54,7 @@ namespace
                                     (GetTickCount() - started) / 1000.0);
 
             // F9 hides and shows the panel. A native mod owns its own keys;
-            // SpeedLoader only takes F1 (input capture) and "/" (console).
+            // FRSModLoader only takes F1 (input capture) and "/" (console).
             bool down = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
             if (down && !wasDown)
             {
@@ -74,7 +74,7 @@ BOOL APIENTRY DllMain(HMODULE self, DWORD reason, LPVOID)
     {
         DisableThreadLibraryCalls(self);
         // Not SL_Connect() here: DllMain runs under the loader lock, and
-        // SpeedLoader may not even be in the process yet.
+        // FRSModLoader may not even be in the process yet.
         CloseHandle(CreateThread(0, 0, Run, 0, 0, 0));
     }
     return TRUE;

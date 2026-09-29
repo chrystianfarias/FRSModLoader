@@ -2,10 +2,10 @@
 
 #include <string>
 
-// The door for native mods: an .asi written in C++ asks SpeedLoader for a
+// The door for native mods: an .asi written in C++ asks FRSModLoader for a
 // panel of HTML and talks to it by message, without a line of JavaScript.
 //
-// The interface those mods include is sdk/speedloader.h; this is the side that
+// The interface those mods include is sdk/frsmodloader.h; this is the side that
 // implements it. A panel is mounted in the same shell, in the same shadow root
 // isolation and on the same channels as a JavaScript mod's page, so the page
 // itself cannot tell which kind of mod is behind it.

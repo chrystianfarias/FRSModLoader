@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/brand/cover.png" alt="SpeedLoader" width="860">
+  <img src="docs/brand/cover.png" alt="FRSModLoader" width="860">
 </p>
 
-# SpeedLoader
+# FRSModLoader
 
 A modding platform for **NFS Underground 2** (`SPEED2.EXE` v1.2 NTSC, 4,800,512
 bytes). A mod here is a folder with JavaScript and HTML:
@@ -49,7 +49,7 @@ the green-outlined panel, the grey list, the pill buttons
 are ES modules). For editor completion, point at the `.d.ts`:
 
 ```js
-/// <reference path="../../sdk/speedloader.d.ts" />
+/// <reference path="../../sdk/frsmodloader.d.ts" />
 
 speed.on("frame", () => {
   const t = speed.game.telemetry();
@@ -62,14 +62,14 @@ speed.call(0x5FAE20, [speed.game.player()], { conv: "thiscall" });
 ```
 
 `ui/index.html` — runs in Chromium. It is not a whole page: it is the fragment
-that goes into its own shadow root, with `speedloader`, `root` and `mod` in
+that goes into its own shadow root, with `frsmodloader`, `root` and `mod` in
 scope for its `<script>` tags.
 
 ```html
 <style> .hud { position: absolute; right: 24px; bottom: 24px; } </style>
 <div class="hud"><span id="rpm">0</span> rpm</div>
 <script>
-  speedloader.on("rpm", (v) => root.getElementById("rpm").textContent = v);
+  frsmodloader.on("rpm", (v) => root.getElementById("rpm").textContent = v);
 </script>
 ```
 
@@ -99,7 +99,7 @@ write, because physics ignores it (see `NOTES.md`).
 ## Interfaces for native mods
 
 A mod written in C or C++ does not need the JavaScript side to get an
-interface. It includes [`sdk/speedloader.h`](sdk/speedloader.h), asks for a
+interface. It includes [`sdk/frsmodloader.h`](sdk/frsmodloader.h), asks for a
 panel and talks to it by message:
 
 ```c
@@ -111,7 +111,7 @@ sl->panel_send_number(panel, "rpm", CurrentRpm());
 
 The page is the same fragment a JavaScript mod writes, in the same shadow root,
 on the same channels — the shell cannot tell the two apart. There is no library
-to link: the header finds SpeedLoader in the process at runtime, so your mod
+to link: the header finds FRSModLoader in the process at runtime, so your mod
 still loads on a machine without it. Details in
 [docs/NATIVE_PLUGINS.md](docs/NATIVE_PLUGINS.md), and a complete mod in one
 file in [`examples/asi-plugin/`](examples/asi-plugin).
@@ -122,20 +122,20 @@ Everything lives inside the game process:
 
 | Layer | What it does |
 |---|---|
-| `SpeedLoader.asi` | injected by the `.asi` loader; plants the hooks |
+| `FRSModLoader.asi` | injected by the `.asi` loader; plants the hooks |
 | QuickJS | runs each mod's `main.js`, on the game thread |
 | CEF (Chromium) | renders the UI off-screen, into memory |
 | D3D9 hook | composites the UI over the game, inside `EndScene` |
-| `SpeedLoaderHelper.exe` | Chromium's subprocesses (renderer, gpu) |
+| `FRSModLoaderHelper.exe` | Chromium's subprocesses (renderer, gpu) |
 | host API | the same UI, lent to `.asi` mods written in C++ |
 
 `main.js` and the page share no memory: they talk by message
-(`speed.ui.send` on one side, `speedloader.on` on the other), with JSON in
+(`speed.ui.send` on one side, `frsmodloader.on` on the other), with JSON in
 between.
 
 ```
 main.js  --speed.ui.send("telemetry", {...})-->  ui/index.html
-main.js  <--speedloader.send("ready", {...})--   ui/index.html
+main.js  <--frsmodloader.send("ready", {...})--   ui/index.html
 ```
 
 ## Build
@@ -164,7 +164,7 @@ The game must be closed to install the `.asi`; with it running, use
 of it is ever committed:
 
 ```
-release\SpeedLoader-0.1.0\
+release\FRSModLoader-0.1.0\
   INSTALL.txt
   LICENSE.txt                ours, plus CEF's, QuickJS's and the loader's
   dinput8.dll                Ultimate ASI Loader, so the player needs nothing else
@@ -198,7 +198,7 @@ which is how you iterate on HTML without restarting the game.
 
 ## Configuration
 
-`SpeedLoader.ini`, next to the `.asi` (the installer never overwrites yours):
+`FRSModLoader.ini`, next to the `.asi` (the installer never overwrites yours):
 
 | Key | What it does |
 |---|---|
@@ -217,14 +217,14 @@ To develop the UI with hot reload, point `Url` at your dev server
 
 The `.asi` attaches at `0x581475`, a `call` to an empty stub in the main loop.
 `NFSU2ExtraOptions` uses the neighbouring one (`0x581470`) and `Pops` uses the
-same one — which is why SpeedLoader **chains** to the previous target instead
+same one — which is why FRSModLoader **chains** to the previous target instead
 of taking its place: all three run.
 
 ## Log
 
-`scripts\SpeedLoader.log`, prefixed by layer (`core`, `gfx`, `cef`, `js`,
+`scripts\FRSModLoader.log`, prefixed by layer (`core`, `gfx`, `cef`, `js`,
 `in`). Mod `console.log` lands there; so does the page's `console.log`, through
-`OnConsoleMessage`. Chromium's own log goes to `SpeedLoaderCef.log`.
+`OnConsoleMessage`. Chromium's own log goes to `FRSModLoaderCef.log`.
 
 ## Contributing
 

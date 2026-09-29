@@ -1,4 +1,4 @@
-// SpeedLoaderHelper.exe - CEF's subprocess (renderer, gpu, utility).
+// FRSModLoaderHelper.exe - CEF's subprocess (renderer, gpu, utility).
 //
 // The game is 32-bit and CEF lives inside it, so this binary is x86 too. It
 // knows nothing about NFSU2: it only hosts the renderer side of the bridge

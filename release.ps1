@@ -1,4 +1,4 @@
-# Stages a distributable build of SpeedLoader into release\.
+# Stages a distributable build of FRSModLoader into release\.
 #
 # The release folder is local - it is in .gitignore and never committed.
 #
@@ -12,13 +12,13 @@
 # What the package looks like. Its contents go into the game folder, next to
 # SPEED2.EXE, exactly as they are:
 #
-#   SpeedLoader-<version>\
+#   FRSModLoader-<version>\
 #     INSTALL.txt
 #     LICENSE.txt                 ours, plus CEF's and the loader's
 #     dinput8.dll                 Ultimate ASI Loader - what loads the .asi
-#     scripts\SpeedLoader.asi
-#     scripts\SpeedLoader.ini
-#     scripts\SpeedLoader\        Chromium runtime, helper, ui\ and mods\
+#     scripts\FRSModLoader.asi
+#     scripts\FRSModLoader.ini
+#     scripts\FRSModLoader\       Chromium runtime, helper, ui\ and mods\
 
 param(
     [string]$Version = "0.1.0",
@@ -35,18 +35,18 @@ $cef    = Join-Path $root "third_party\cef"
 $loader = Join-Path $root "third_party\asi-loader"
 
 # ---- build ---------------------------------------------------------------
-$asi = Join-Path $build "SpeedLoader.asi"
+$asi = Join-Path $build "FRSModLoader.asi"
 if ($Rebuild -or -not (Test-Path $asi)) {
     "[..] building"
     & (Join-Path $root "build.bat") nomod
     if ($LASTEXITCODE -ne 0) { throw "build failed" }
 }
-if (-not (Test-Path $asi)) { throw "SpeedLoader.asi not found. Run build.bat first." }
+if (-not (Test-Path $asi)) { throw "FRSModLoader.asi not found. Run build.bat first." }
 if (-not (Test-Path (Join-Path $cef "Release\libcef.dll"))) {
     throw "CEF is missing. Run tools\fetch_cef.ps1 first."
 }
 
-# The .asi loader is what loads SpeedLoader.asi in the first place. Shipping it
+# The .asi loader is what loads FRSModLoader.asi in the first place. Shipping it
 # is the convention for NFSU2 mods - ExtraOptions does the same - and it saves
 # the player a second download. -NoAsiLoader is for whoever already has one.
 if (-not $NoAsiLoader -and -not (Test-Path (Join-Path $loader "dinput8.dll"))) {
@@ -55,18 +55,18 @@ if (-not $NoAsiLoader -and -not (Test-Path (Join-Path $loader "dinput8.dll"))) {
 }
 
 # ---- a clean staging tree ------------------------------------------------
-$name    = "SpeedLoader-$Version"
+$name    = "FRSModLoader-$Version"
 $stage   = Join-Path $root "release\$name"
 $scripts = Join-Path $stage "scripts"
-$runtime = Join-Path $scripts "SpeedLoader"
+$runtime = Join-Path $scripts "FRSModLoader"
 
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 
 # ---- binaries ------------------------------------------------------------
 Copy-Item $asi $scripts -Force
-Copy-Item (Join-Path $build "SpeedLoaderHelper.exe") $runtime -Force
-Copy-Item (Join-Path $root "SpeedLoader.ini") $scripts -Force
+Copy-Item (Join-Path $build "FRSModLoaderHelper.exe") $runtime -Force
+Copy-Item (Join-Path $root "FRSModLoader.ini") $scripts -Force
 
 if (-not $NoAsiLoader) {
     Copy-Item (Join-Path $loader "dinput8.dll") $stage -Force
@@ -100,13 +100,13 @@ $sources | ForEach-Object { Copy-Item $_.FullName $modsOut -Recurse -Force }
 # One LICENSE.txt for the whole package: ours, then the components we ship.
 # Both of them are permissive, and both require their notice to travel along.
 $parts = @(
-    "SpeedLoader - LICENSE",
+    "FRSModLoader - LICENSE",
     "",
-    "This package contains SpeedLoader, and third-party components that keep",
+    "This package contains FRSModLoader, and third-party components that keep",
     "their own licenses. Each one is reproduced in full below.",
     "",
     ("=" * 76),
-    "1. SpeedLoader",
+    "1. FRSModLoader",
     ("=" * 76),
     "",
     (Get-Content (Join-Path $root "LICENSE") -Raw).TrimEnd(),
@@ -118,7 +118,7 @@ $parts = @(
     (Get-Content (Join-Path $cef "LICENSE.txt") -Raw).TrimEnd()
 )
 
-# QuickJS is linked into SpeedLoader.asi, so its notice travels too.
+# QuickJS is linked into FRSModLoader.asi, so its notice travels too.
 $quickjs = Join-Path $root "build\_deps\quickjs-src\LICENSE"
 if (Test-Path $quickjs) {
     $parts += @(
@@ -159,7 +159,7 @@ $loaderLines = if ($NoAsiLoader) {
 }
 
 @"
-SpeedLoader $Version
+FRSModLoader $Version
 A modding platform for NFS Underground 2 (SPEED2.EXE v1.2 NTSC, 4,800,512 bytes).
 
 INSTALL
@@ -171,32 +171,32 @@ INSTALL
 
 $loaderLines
 
-  Upgrading: your scripts\SpeedLoader.ini is yours - keep it, and compare it
+  Upgrading: your scripts\FRSModLoader.ini is yours - keep it, and compare it
   with the one in this package if a new key shows up.
 
 KEYS
 
   F1   hands keyboard and mouse to the UI, and back to the game
-       (configurable in SpeedLoader.ini)
+       (configurable in FRSModLoader.ini)
 
 WHAT IS IN HERE
 
   dinput8.dll                    the .asi loader (Ultimate ASI Loader)
-  scripts\SpeedLoader.asi        SpeedLoader itself
-  scripts\SpeedLoader.ini        configuration
-  scripts\SpeedLoader\           Chromium runtime and the helper process
-  scripts\SpeedLoader\ui\        the shell that mounts each mod's UI
-  scripts\SpeedLoader\mods\      $shipped
+  scripts\FRSModLoader.asi       FRSModLoader itself
+  scripts\FRSModLoader.ini       configuration
+  scripts\FRSModLoader\          Chromium runtime and the helper process
+  scripts\FRSModLoader\ui\       the shell that mounts each mod's UI
+  scripts\FRSModLoader\mods\     $shipped
 
 TROUBLE
 
-  scripts\SpeedLoader.log is the first place to look; Chromium's own log is
-  SpeedLoaderCef.log next to it. Most surprises are a conflict with another
+  scripts\FRSModLoader.logis the first place to look; Chromium's own log is
+  FRSModLoaderCef.log next to it. Most surprises are a conflict with another
   .asi in the main loop - say which ones you have when reporting a problem.
 
 LICENSE
 
-  SpeedLoader by Chrystian Farias
+  FRSModLoader by Chrystian Farias
   https://github.com/chrystianfarias/SpeedLoader
 
   CC BY-NC 4.0 - Copyright (c) 2025 Chrystian Farias. See LICENSE.

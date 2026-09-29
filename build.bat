@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-rem Builds SpeedLoader (x86) and installs it into the NFSU2 scripts\ folder.
+rem Builds FRSModLoader (x86) and installs it into the NFSU2 scripts\ folder.
 rem
 rem   build.bat            build and install
 rem   build.bat nomod      build only

@@ -1,4 +1,4 @@
-# Launches the game with focus, waits, and returns SpeedLoader's log.
+# Launches the game with focus, waits, and returns FRSModLoader's log.
 #
 #   .\run.ps1                 # 30 s, filtered log
 #   .\run.ps1 -Seconds 60
@@ -14,8 +14,8 @@ param(
 
 # The game runs with scripts\ as its working directory (that is where the .asi
 # loader puts it), so that is where the log lands.
-$log = Join-Path $Game "scripts\SpeedLoader.log"
-$cefLog = Join-Path $Game "scripts\SpeedLoaderCef.log"
+$log = Join-Path $Game "scripts\FRSModLoader.log"
+$cefLog = Join-Path $Game "scripts\FRSModLoaderCef.log"
 Remove-Item $log, $cefLog -ErrorAction SilentlyContinue
 
 Add-Type -Namespace SL -Name Win -MemberDefinition @'
@@ -41,7 +41,7 @@ if (-not $exitedOnItsOwn -and -not $KeepOpen) { Stop-Process -Id $proc.Id -Force
 Start-Sleep -Milliseconds 800
 
 "--- game exited on its own: $exitedOnItsOwn ---"
-if (-not (Test-Path $log)) { "no SpeedLoader.log"; exit }
+if (-not (Test-Path $log)) { "no FRSModLoader.log"; exit }
 
 if ($Full) {
     Get-Content $log
