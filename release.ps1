@@ -3,8 +3,7 @@
 # The release folder is local - it is in .gitignore and never committed.
 #
 #   .\release.ps1                     build if needed, stage and zip
-#   .\release.ps1 -Version 1.0.0      name the package
-#   .\release.ps1 -Mods tachometer    ship only these mods
+#   .\release.ps1 -Version 1.2.1      name the package (default: src\core\Version.h)
 #   .\release.ps1 -NoZip              leave the folder, skip the .zip
 #   .\release.ps1 -Rebuild            build first, even if binaries exist
 #   .\release.ps1 -NoAsiLoader        package without the .asi loader
@@ -18,11 +17,13 @@
 #     dinput8.dll                 Ultimate ASI Loader - what loads the .asi
 #     scripts\FRSModLoader.asi
 #     scripts\FRSModLoader.ini
-#     scripts\FRSModLoader\       Chromium runtime, helper, ui\ and mods\
+#     scripts\FRSModLoader\       Chromium runtime, helper, ui\ and an empty mods\
+#
+# The package is the platform and nothing else: no mod ships with the loader.
+# Mods are released on their own and dropped into scripts\FRSModLoader\mods\.
 
 param(
-    [string]$Version = "0.1.0",
-    [string[]]$Mods,
+    [string]$Version,
     [switch]$NoZip,
     [switch]$Rebuild,
     [switch]$NoAsiLoader
@@ -30,6 +31,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
+
+# The version the .asi reports is the one the package is named after.
+if (-not $Version) {
+    $header = Get-Content (Join-Path $root "src\core\Version.h") -Raw
+    if ($header -notmatch 'FRSMODLOADER_VERSION\s+"([^"]+)"') {
+        throw "no FRSMODLOADER_VERSION in src\core\Version.h"
+    }
+    $Version = $Matches[1]
+}
 $build  = Join-Path $root "build\Release"
 $cef    = Join-Path $root "third_party\cef"
 $loader = Join-Path $root "third_party\asi-loader"
@@ -80,21 +90,19 @@ Get-ChildItem (Join-Path $cef "Release") -File |
 
 Copy-Item (Join-Path $cef "Resources\*") $runtime -Recurse -Force
 
-# ---- UI shell and mods ---------------------------------------------------
-Copy-Item (Join-Path $root "ui") $runtime -Recurse -Force
-
-$modsOut = Join-Path $runtime "mods"
-New-Item -ItemType Directory -Force -Path $modsOut | Out-Null
-
-$modsDir = Join-Path $root "mods"
-$sources = if (Test-Path $modsDir) { @(Get-ChildItem $modsDir -Directory) } else { @() }
-if ($Mods) {
-    $sources = $sources | Where-Object { $Mods -contains $_.Name }
-    $missing = $Mods | Where-Object { $sources.Name -notcontains $_ }
-    if ($missing) { throw "mod not found: $($missing -join ', ')" }
+# ---- UI shell, and a place for mods ---------------------------------------
+# ui\ as git has it: ui\fonts holds a licensed font installed on this machine
+# only, which must never travel.
+$uiOut = Join-Path $runtime "ui"
+New-Item -ItemType Directory -Force -Path $uiOut | Out-Null
+git -C $root ls-files ui | ForEach-Object {
+    $dest = Join-Path $runtime $_
+    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+    Copy-Item (Join-Path $root $_) $dest -Force
 }
-if ($Mods -and -not $sources) { throw "no mods to ship" }
-$sources | ForEach-Object { Copy-Item $_.FullName $modsOut -Recurse -Force }
+
+# Empty: the loader ships no mod.
+New-Item -ItemType Directory -Force -Path (Join-Path $runtime "mods") | Out-Null
 
 # ---- paperwork -----------------------------------------------------------
 # One LICENSE.txt for the whole package: ours, then the components we ship.
@@ -145,7 +153,6 @@ if (-not $NoAsiLoader) {
 
 ($parts -join "`r`n") | Set-Content (Join-Path $stage "LICENSE.txt") -Encoding utf8
 
-$shipped = if ($sources) { ($sources.Name | Sort-Object) -join ", " } else { "none" }
 $loaderLines = if ($NoAsiLoader) {
 @"
   You need an .asi loader already installed - this package does not bring one.
@@ -174,10 +181,18 @@ $loaderLines
   Upgrading: your scripts\FRSModLoader.ini is yours - keep it, and compare it
   with the one in this package if a new key shows up.
 
+MODS
+
+  None come with the loader. A mod is a folder: drop it into
+  scripts\FRSModLoader\mods\ and start the game. Options > Mods lists every
+  mod installed, switches each on or off, and holds its settings.
+
 KEYS
 
-  F1   hands keyboard and mouse to the UI, and back to the game
-       (configurable in FRSModLoader.ini)
+  F1   hands the keyboard to the UI, and back to the game
+       (configurable in FRSModLoader.ini). The mouse needs no key: a click
+       on a mod's panel is the panel's.
+  /    opens the in-game console
 
 WHAT IS IN HERE
 
@@ -186,11 +201,11 @@ WHAT IS IN HERE
   scripts\FRSModLoader.ini       configuration
   scripts\FRSModLoader\          Chromium runtime and the helper process
   scripts\FRSModLoader\ui\       the shell that mounts each mod's UI
-  scripts\FRSModLoader\mods\     $shipped
+  scripts\FRSModLoader\mods\     where mods go (empty)
 
 TROUBLE
 
-  scripts\FRSModLoader.logis the first place to look; Chromium's own log is
+  scripts\FRSModLoader.log is the first place to look; Chromium's own log is
   FRSModLoaderCef.log next to it. Most surprises are a conflict with another
   .asi in the main loop - say which ones you have when reporting a problem.
 
@@ -215,7 +230,7 @@ if (-not $NoZip) {
     $zip = Join-Path $root "release\$name.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
     Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
-    "[ok] release\$name.zip ($size unpacked, mods: $shipped)"
+    "[ok] release\$name.zip ($size unpacked)"
 } else {
-    "[ok] release\$name ($size, mods: $shipped)"
+    "[ok] release\$name ($size)"
 }

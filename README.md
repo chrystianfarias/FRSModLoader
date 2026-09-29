@@ -161,10 +161,11 @@ The game must be closed to install the `.asi`; with it running, use
 ## Packaging a release
 
 `release.ps1` stages a drop-in build into `release\` - ignored by git, so none
-of it is ever committed:
+of it is ever committed. It is the platform alone: no mod ships with the
+loader, and `scripts\FRSModLoader\mods\` goes out empty.
 
 ```
-release\FRSModLoader-0.1.0\
+release\FRSModLoader-<version>\
   INSTALL.txt
   LICENSE.txt                ours, plus CEF's, QuickJS's and the loader's
   dinput8.dll                Ultimate ASI Loader, so the player needs nothing else
@@ -173,8 +174,7 @@ release\FRSModLoader-0.1.0\
 
 ```
 .\release.ps1                          build if needed, stage and zip
-.\release.ps1 -Version 1.0.0           name the package
-.\release.ps1 -Mods my-mod             ship only these mods
+.\release.ps1 -Version 1.2.1           name the package (default: src\core\Version.h)
 .\release.ps1 -NoZip                   leave the folder, skip the .zip
 .\release.ps1 -NoAsiLoader             package without the loader
 ```
@@ -231,6 +231,11 @@ of taking its place: all three run.
 Pull requests are welcome — mods, SDK surface, fixes, documented addresses —
 and are merged after review and approval. The details, and what a reviewable
 PR looks like, are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Support
+
+FRSModLoader is free, and built in spare time. If it is useful to you, you
+can buy me a coffee: <https://buymeacoffee.com/chrystianfarias>.
 
 ## License
 
