@@ -174,7 +174,7 @@ release\FRSModLoader-<version>\
 
 ```
 .\release.ps1                          build if needed, stage and zip
-.\release.ps1 -Version 1.2.1           name the package (default: src\core\Version.h)
+.\release.ps1 -Version 0.1.3           name the package (default: src\core\Version.h)
 .\release.ps1 -NoZip                   leave the folder, skip the .zip
 .\release.ps1 -NoAsiLoader             package without the loader
 ```
