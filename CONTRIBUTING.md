@@ -3,8 +3,8 @@
 Pull requests are welcome — mods, SDK surface, bug fixes, documentation. They
 are merged after review and approval by the maintainer (Chrystian Farias).
 
-By opening a pull request you agree that your contribution is licensed under
-the project's [LICENSE](LICENSE) (CC BY-NC 4.0).
+By opening a pull request you agree that your contribution is distributed under
+the project's terms of use in [LICENSE](LICENSE).
 
 ## Before you start
 

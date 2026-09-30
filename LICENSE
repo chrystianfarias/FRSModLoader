@@ -1,47 +1,35 @@
 FRSModLoader
 Copyright (c) 2025 Chrystian Farias
 
-This work is licensed under the Creative Commons
-Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+TERMS OF USE
 
-Full legal text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
-Summary:        https://creativecommons.org/licenses/by-nc/4.0/
+You may use, study, copy, modify and redistribute this software, including
+your own forks, builds and derivative mods, free of charge, under two
+conditions:
 
-WHAT YOU MAY DO
-
-  * Use, run and study this software, for any non-commercial purpose.
-  * Copy and redistribute it, in any medium or format.
-  * Modify it and distribute your modified versions (remixes, forks,
-    derivative mods and builds).
-
-UNDER TWO CONDITIONS
-
-  1. Attribution. You must give appropriate credit to Chrystian Farias,
-     link back to this repository, and indicate if changes were made.
-     A credit line such as:
+  1. Credit. You must credit Chrystian Farias and link back to this
+     repository. A line such as:
 
          Based on FRSModLoader by Chrystian Farias
-         https://github.com/chrystianfarias/SpeedLoader
+         https://github.com/chrystianfarias/FRSModLoader
 
      in the README, the mod description, the about screen, or the video
-     description, is enough. You may not suggest that the author endorses
-     you or your use of the work.
+     description, is enough. Do not suggest that the author endorses you or
+     your use of the work.
 
-  2. NonCommercial. You may not use this work, in whole or in part, for
-     commercial purposes. That includes selling it, selling access to it,
-     bundling it with a paid product or service, using it in paid mod
-     packs, paywalled or subscription distribution, and any distribution
-     primarily intended for or directed toward commercial advantage or
-     monetary compensation. Free public distribution, and use in videos or
-     streams that are not built around selling this software, are fine.
+  2. No selling. You may not sell this software, in whole or in part. That
+     includes selling access to it, bundling it with a paid product or
+     service, putting it in paid mod packs, and paywalled or subscription
+     distribution. Free public distribution, and use in videos or streams,
+     are fine.
 
-     If you want a commercial license, ask the author.
+Any other use needs the author's permission.
 
 CONTRIBUTIONS
 
-By submitting a pull request you agree that your contribution is licensed
-under these same terms. Pull requests are welcome and are merged after
-review and approval by the maintainer. See CONTRIBUTING.md.
+By submitting a pull request you agree that your contribution is distributed
+under these same terms. Pull requests are welcome and are merged after review
+and approval by the maintainer. See CONTRIBUTING.md.
 
 NO WARRANTY
 

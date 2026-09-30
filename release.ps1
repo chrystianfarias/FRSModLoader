@@ -212,10 +212,10 @@ TROUBLE
 LICENSE
 
   FRSModLoader by Chrystian Farias
-  https://github.com/chrystianfarias/SpeedLoader
+  https://github.com/chrystianfarias/FRSModLoader
 
-  CC BY-NC 4.0 - Copyright (c) 2025 Chrystian Farias. See LICENSE.
-  Redistribution is fine with credit, and not for commercial purposes.
+  Copyright (c) 2025 Chrystian Farias. See LICENSE for the terms of use.
+  Free to redistribute with credit. Selling it is not allowed.
   CEF/Chromium and Ultimate ASI Loader keep their own licenses. All of them
   are in LICENSE.txt, in full.
 

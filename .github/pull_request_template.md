@@ -10,5 +10,5 @@
 - [ ] New game addresses (if any) are documented in `NOTES.md` with how they were found
 - [ ] No build output committed (`build/`, `third_party/cef/`, `refs/`)
 
-By opening this PR I agree that my contribution is licensed under the project's
-[LICENSE](../LICENSE) (CC BY-NC 4.0).
+By opening this PR I agree that my contribution is distributed under the
+project's terms of use in [LICENSE](../LICENSE).

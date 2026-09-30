@@ -42,8 +42,8 @@
  * always invoked on the GAME thread, inside the frame - the same place your
  * hooks run, so reading the game's memory from it is safe.
  *
- * FRSModLoader is CC BY-NC 4.0, but this header is the interface to it: use it
- * in your own mod freely.
+ * FRSModLoader has its own terms of use (see LICENSE), but this header is the
+ * interface to it: use it in your own mod freely.
  */
 #ifndef FRSMODLOADER_H_
 #define FRSMODLOADER_H_
