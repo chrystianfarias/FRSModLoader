@@ -1,22 +1,25 @@
 #pragma once
 
-// "Mods", the first entry of the game's Options menu, and the list it opens.
+// "Mods", the first entry of the game's Options menu - the main menu's and the
+// pause menu's - and the list it opens.
 //
 // It is the loader's own, so it lives in the .asi: no mod, no JavaScript on the
-// game side. Four pieces of the engine are taken over for it, all found in the
+// game side. These pieces of the engine are taken over for it, all found in the
 // disassembly of SPEED2.EXE v1.2:
 //
-//   0x4B6230  the Options screen's Setup. It does nothing but build its items
-//             (Audio first) with IconOption_Create + AddOption, so an item
-//             added before the original runs is the first one.
+//   0x4B6230  the Options screen's Setup (UI_OptionsMain.fng), and 0x4C3000
+//             the pause menu's (UI_PauseOptionsMain.fng). They do nothing but
+//             build their items (Audio first) with IconOption_Create +
+//             AddOption, so an item added before the original runs is the
+//             first one.
 //   0x4FF9D0  the language lookup: hash in edx, a binary search over the table
 //             Languages\*.bin loaded at 0x8383D8, the text in eax. "Mods" is
 //             not in any language file, so our hash answers it.
-//   0x4B6080  the Options screen's messages. Choosing an entry makes the
-//             screen leave for a page and come back rebuilt; "Mods" opens
-//             over it instead, so its choice is taken here and never reaches
-//             the screen, which would otherwise wait for a page that never
-//             comes and ignore every entry after it.
+//   0x4B6080  the Options screen's messages (0x4A7D60 in the pause menu's).
+//             Choosing an entry makes the screen leave for a page and come
+//             back rebuilt; "Mods" opens over it instead, so its choice is
+//             taken here and never reaches the screen, which would otherwise
+//             wait for a page that never comes and ignore every entry after it.
 //   0x4901D0  the texture lookup, GetTextureInfo(hash, ...). Our icon is no
 //             texture pack's either: the lookup of our hash returns a copy of
 //             the Audio icon's TextureInfo (and of the platform block it
@@ -29,6 +32,6 @@
 // uses.
 namespace ModsMenu
 {
-    void Install();   // DllMain: the three detours
+    void Install();   // DllMain: the detours
     void Tick();      // main loop: mounts the panel, opens it when chosen
 }

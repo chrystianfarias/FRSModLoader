@@ -22,11 +22,9 @@ extern "C" const SL_Api* __cdecl FRSModLoader_GetApi(unsigned version);
 namespace
 {
     // ---- the engine -------------------------------------------------------
-    const uintptr_t OPTIONS_SETUP    = 0x4B6230;
     const uintptr_t LANGUAGE_LOOKUP  = 0x4FF9D0;
     const uintptr_t GET_TEXTURE_INFO = 0x4901D0;
     const uintptr_t OPTIONS_PAGE     = 0x83AA04;   // which page Options opens
-    const uintptr_t OPTIONS_NOTIFY   = 0x4B6080;   // the Options screen's messages
     const size_t    SCREEN_CURRENT   = 0x58;       // the option under the highlight
     const size_t    SCREEN_INPUT_ON  = 0x7B;       // cleared while it animates out
 
@@ -45,7 +43,6 @@ namespace
     const tOperatorNew      OperatorNew      = (tOperatorNew)0x575620;
     const tIconOptionCreate IconOptionCreate = (tIconOptionCreate)0x51F670;
 
-    tSetup          g_origSetup = 0;
     tGetTextureInfo g_origGetTexture = 0;
     void*           g_origLookup = 0;     // trampoline into 0x4FF9D0
 
@@ -214,20 +211,41 @@ namespace
 
     // ---- the entry --------------------------------------------------------
     //
-    // Choosing an entry is a message to the screen (0x4B6080), and the
-    // screen's answer is to leave: its base (0x543D40) marks the choice as
-    // pending, the entry's React says which page, and the screen comes back
-    // only when that page is closed - built anew, by its Setup. Every entry
-    // the game has leaves this way, even the ones that "react in place"
-    // (Profiles switches to UI_ProfileManager.fng). "Mods" does not leave:
-    // the list opens over the screen. Let through, the choice left the screen
-    // waiting for a page that never came, and no entry opened after it.
+    // "Mods" is on two screens built the same way (IconScrollerMenu): the
+    // Options of the main menu, and the Options of the pause menu. Each has a
+    // Setup that only adds its entries, Audio first - so an entry added before
+    // it runs is the first one - and a message handler.
     //
-    // So the choice of "Mods" never reaches the screen: it is taken here, and
-    // the screen stays exactly as it was.
+    // Choosing an entry is a message to the screen, and the screen's answer is
+    // to leave: its base (0x543D40) marks the choice as pending, the entry's
+    // React says which page, and the screen comes back only when that page is
+    // closed - built anew, by its Setup. Every entry the game has leaves this
+    // way, even the ones that "react in place" (Profiles switches to
+    // UI_ProfileManager.fng). "Mods" does not leave: the list opens over the
+    // screen. Let through, the choice left the screen waiting for a page that
+    // never came, and no entry opened after it.
+    //
+    // So the choice of "Mods" never reaches the screen: it is taken in the
+    // handler, and the screen stays exactly as it was.
     typedef void (__fastcall* tNotify)(DWORD* screen, void* edx, unsigned int msg,
                                        unsigned int a, unsigned int b, unsigned int c);
-    tNotify g_origNotify = 0;
+
+    struct Screen
+    {
+        const char* name;
+        uintptr_t   setup;      // builds the entries
+        uintptr_t   notify;     // the screen's messages
+        tSetup      origSetup;
+        tNotify     origNotify;
+    };
+
+    Screen g_screens[] = {
+        // UI_OptionsMain.fng; its pages are UI_Options.fng.
+        { "Options",       0x4B6230, 0x4B6080, 0, 0 },
+        // UI_PauseOptionsMain.fng, from the pause menu; its pages are
+        // UI_PauseOptions.fng. Audio, Video, Gameplay, Player.
+        { "pause Options", 0x4C3000, 0x4A7D60, 0, 0 },
+    };
 
     bool  g_openAsked = false;
     void* g_option = 0;          // our entry on the screen now on show
@@ -240,22 +258,25 @@ namespace
         LogGfx("mods menu: chosen");
     }
 
-    void __fastcall OptionsNotifyHook(DWORD* screen, void* edx, unsigned int msg,
-                                      unsigned int a, unsigned int b, unsigned int c)
+    // Whether `msg` is the choice of our entry on this screen.
+    bool OurChoice(DWORD* screen, unsigned int msg)
     {
         unsigned char* s = (unsigned char*)screen;
-        if (msg == OPTION_ACTIVATED && g_option &&
-            *(void**)(s + SCREEN_CURRENT) == g_option && s[SCREEN_INPUT_ON])
-        {
-            Chosen();
-            return;
-        }
-        g_origNotify(screen, edx, msg, a, b, c);
+        return msg == OPTION_ACTIVATED && g_option &&
+               *(void**)(s + SCREEN_CURRENT) == g_option && s[SCREEN_INPUT_ON];
+    }
+
+    template <int N>
+    void __fastcall NotifyHook(DWORD* screen, void* edx, unsigned int msg,
+                               unsigned int a, unsigned int b, unsigned int c)
+    {
+        if (OurChoice(screen, msg)) { Chosen(); return; }
+        g_screens[N].origNotify(screen, edx, msg, a, b, c);
     }
 
     // Only reached if the choice came some other way than the screen's
-    // message. Page index 6 is the one the screen stays put on - none of its
-    // pages uses it.
+    // message. On the main menu's Options, page index 6 is the one the screen
+    // stays put on - none of its pages uses it.
     void __fastcall OptionReact(void*, void*, const char*, unsigned int data,
                                 DWORD*, unsigned int, unsigned int)
     {
@@ -264,23 +285,27 @@ namespace
         Chosen();
     }
 
-    void __fastcall OptionsSetupHook(DWORD* screen, void* edx)
+    void AddEntry(DWORD* screen)
     {
         void* opt = OperatorNew(ICON_OPTION_SIZE);
-        if (opt)
-        {
-            IconOptionCreate(opt, g_iconHash, g_labelHash, 0);
-            *(DWORD*)opt = (DWORD)g_optionVtable;
-            // "Reacts in place", as the game marks Profiles or Save: should a
-            // choice ever get past OptionsNotifyHook, the screen at least does
-            // not switch its input off to animate out (0x52FBF0).
-            *((BYTE*)opt + 0x45) = 1;
-            g_option = opt;
-            // AddOption is slot 6 of the screen's vtable.
-            tAddOption addOption = (tAddOption)(*(DWORD**)screen)[6];
-            addOption(screen, opt);
-        }
-        g_origSetup(screen, edx);
+        if (!opt) return;
+        IconOptionCreate(opt, g_iconHash, g_labelHash, 0);
+        *(DWORD*)opt = (DWORD)g_optionVtable;
+        // "Reacts in place", as the game marks Profiles or Save: should a
+        // choice ever get past NotifyHook, the screen at least does not switch
+        // its input off to animate out (0x52FBF0).
+        *((BYTE*)opt + 0x45) = 1;
+        g_option = opt;
+        // AddOption is slot 6 of the screen's vtable.
+        tAddOption addOption = (tAddOption)(*(DWORD**)screen)[6];
+        addOption(screen, opt);
+    }
+
+    template <int N>
+    void __fastcall SetupHook(DWORD* screen, void* edx)
+    {
+        AddEntry(screen);
+        g_screens[N].origSetup(screen, edx);
     }
 
     // ---- the panel --------------------------------------------------------
@@ -334,13 +359,21 @@ namespace ModsMenu
                                                    "GetTextureInfo");
         // Without its label and icon the entry would be a blank; better none.
         if (!g_origLookup || !g_origGetTexture) return;
-        // The choice has to be caught before the screen sees it; without that
-        // the entry would lock the menu, so no hook, no entry.
-        g_origNotify = (tNotify)Detour(OPTIONS_NOTIFY, (void*)OptionsNotifyHook,
-                                       "the Options messages");
-        if (!g_origNotify) return;
-        g_origSetup = (tSetup)Detour(OPTIONS_SETUP, (void*)OptionsSetupHook, "the Options Setup");
-        LogGfx("mods menu: %s", g_origSetup ? "installed in Options" : "not installed");
+
+        void* const setups[]  = { (void*)SetupHook<0>,  (void*)SetupHook<1> };
+        void* const notifies[] = { (void*)NotifyHook<0>, (void*)NotifyHook<1> };
+        static_assert(sizeof(g_screens) / sizeof(g_screens[0]) == 2,
+                      "one SetupHook and NotifyHook instance per screen");
+
+        for (int i = 0; i < 2; i++)
+        {
+            Screen& sc = g_screens[i];
+            // The choice has to be caught before the screen sees it; without
+            // that the entry would lock the menu, so no hook, no entry.
+            sc.origNotify = (tNotify)Detour(sc.notify, notifies[i], sc.name);
+            if (sc.origNotify) sc.origSetup = (tSetup)Detour(sc.setup, setups[i], sc.name);
+            LogGfx("mods menu: %s %s", sc.origSetup ? "installed in" : "not in", sc.name);
+        }
     }
 
     void Tick()
