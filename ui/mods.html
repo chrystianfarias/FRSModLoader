@@ -38,13 +38,15 @@
      at 768 lines and at 2160. */
   .menu {
     --nfs-size: clamp(12px, 1.85vh, 26px);
-    width: min(62em, 94vw);
+    width: min(80em, 96vw);
     outline: none;
   }
 
   .head-count { font-style: normal; }
 
-  .split { height: 31em; grid-template-columns: 19em 1fr; }
+  /* Three columns: the mods, the selected one with its settings, and the
+     legend of the focused setting. */
+  .split { height: 31em; grid-template-columns: 17em minmax(0, 1fr) 19em; }
   .split .nfs-split__side,
   .split .nfs-split__main { overflow-y: auto; scrollbar-width: thin; }
 
@@ -87,6 +89,7 @@
   /* The settings: the game's own options sheet (nfsu2.css). */
   .sheet { margin-top: .7em; }
   .sheet-empty { padding: .5em .85em; color: var(--nfs-sheet-ink-soft); font-weight: 600; }
+
   .empty-note { padding: .8em .2em; color: var(--nfs-ink-dim); font-style: normal; }
 
 </style>
@@ -105,6 +108,15 @@
           </div>
           <div class="nfs-split__main">
             <div class="detail" id="detail"></div>
+          </div>
+          <div class="nfs-split__main">
+            <div class="nfs-legend nfs-legend--side is-empty" id="legend">
+              <img class="nfs-legend__image" id="legend-image" alt="" hidden>
+              <div class="nfs-legend__body">
+                <div class="nfs-legend__title" id="legend-title"></div>
+                <p class="nfs-legend__text" id="legend-text"></p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -146,8 +158,10 @@
 
   function optionsOf(item) {
     return (item.options || []).map((o) =>
-      typeof o === 'object' && o !== null ? { value: o.value, label: String(o.label ?? o.value) }
-                                          : { value: o, label: String(o) });
+      typeof o === 'object' && o !== null
+        ? { value: o.value, label: String(o.label ?? o.value),
+            description: o.description, image: o.image }
+        : { value: o, label: String(o) });
   }
 
   function valueOf(m, item) {
@@ -159,9 +173,13 @@
     return undefined;
   }
 
+  // A path from a manifest, against the mod's folder (a plugin's: scripts\).
+  function fileUrl(m, path) {
+    return /^[a-z]+:/i.test(path) ? path : m.base + String(path).replace(/\\/g, '/');
+  }
+
   function thumbUrl(m) {
-    const t = m.manifest.thumb || 'thumb.png';
-    return /^[a-z]+:/i.test(t) ? t : m.base + String(t).replace(/\\/g, '/');
+    return fileUrl(m, m.manifest.thumb || 'thumb.png');
   }
 
   function picture(m, cls) {
@@ -277,7 +295,9 @@
 
     // The switch comes first, then whatever the mod declared.
     addRow(opts, m, { id: '\u0000enabled', type: 'toggle', label: 'Mod enabled',
-                      on: 'On', off: 'Off' });
+                      on: 'On', off: 'Off',
+                      description: 'Switches the whole mod on or off. The change takes ' +
+                                   'effect the next time the game starts.' });
 
     const items = settingsOf(m);
     if (!items.length) {
@@ -323,7 +343,6 @@
     }
 
     li.className = 'nfs-option';
-    if (item.description) li.title = item.description;
     const index = rows.length;
     rows.push({ item, el: li });
 
@@ -440,6 +459,8 @@
     frsmodloader.send('set:' + m.id, m.values);
     const r = rows.find((r) => r.item === item);
     if (r) paintValue(m, item, r.el);
+    // A choice's options may each explain themselves.
+    paintLegend();
   }
 
   function press(item) {
@@ -480,6 +501,48 @@
     if (opts) opts.classList.toggle('is-focus', zone === 'opts');
     const r = rows[row];
     if (zone === 'opts' && r) r.el.scrollIntoView({ block: 'nearest' });
+    paintLegend();
+  }
+
+  // The legend of the focused option, in the right-hand column: its
+  // "description" and "image" from the manifest - or, on a choice, those of
+  // the value it holds now, when that option has its own. With nothing to
+  // say, the column stays and only says how to get one.
+  const legend = $('legend');
+  const legendImage = $('legend-image');
+  legendImage.onerror = () => { legendImage.hidden = true; };
+
+  function paintLegend() {
+    const m = mods[sel];
+    const r = zone === 'opts' ? rows[row] : null;
+    const item = r && r.item;
+
+    let text = item && item.description;
+    let image = item && item.image;
+    let title = item ? String(item.label || item.id || '') : '';
+    if (item && item.type === 'choice') {
+      const o = optionsOf(item).find((o) => o.value === valueOf(m, item));
+      if (o && (o.description || o.image)) {
+        text = o.description || text;
+        image = o.image || image;
+        title += ': ' + o.label;
+      }
+    }
+
+    const empty = !(text || image);
+    legend.classList.toggle('is-empty', empty);
+    if (empty) {
+      $('legend-title').textContent = '';
+      $('legend-text').textContent = item ? 'No details for this setting.'
+                                           : 'Pick a setting to see what it does.';
+      legendImage.hidden = true;
+      return;
+    }
+    $('legend-title').textContent = title;
+    $('legend-text').textContent = text || '';
+    const src = image ? fileUrl(m, image) : '';
+    legendImage.hidden = !src;
+    if (src && legendImage.getAttribute('src') !== src) legendImage.src = src;
   }
 
   // Keys by their Windows key code, as the gas station reads them: the loader

@@ -220,7 +220,8 @@ ApplySettings(sl->mod_settings(self));   /* what the player set last time */
 
 - The rows (`toggle`, `range`, `choice`, `action`, `section`) are the ones in
   [MODDING.md → Settings](MODDING.md#settings-and-the-mods-menu).
-- `thumb` is relative to `scripts\`, where your `.asi` lives.
+- `thumb`, and a row's or an option's legend `image`, are relative to
+  `scripts\`, where your `.asi` lives.
 - The values arrive as one JSON object. A setting the player never touched is
   not in it: its value is the `default` you declared.
 - The loader keeps them in `scripts\FRSModLoader\data\settings\<id>.json`.

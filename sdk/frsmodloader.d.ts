@@ -397,16 +397,23 @@ declare namespace speed {
         function define(items: Setting[]): void;
     }
 
+    /**
+     * The legend the Mods menu shows for the focused row: a sentence on what
+     * it does and/or a picture of the effect (relative to the mod's folder).
+     */
+    interface Legend { description?: string; image?: string }
+
     type Setting =
         | { type: "section"; label: string }
-        | { id: string; type: "toggle"; label: string; default?: boolean;
-            on?: string; off?: string; description?: string }
-        | { id: string; type: "range"; label: string; min: number; max: number;
-            step?: number; unit?: string; default?: number; description?: string }
-        | { id: string; type: "choice"; label: string;
-            options: (string | number | { value: any; label: string })[];
-            default?: any; description?: string }
-        | { id: string; type: "action"; label: string; button?: string; description?: string };
+        | ({ id: string; type: "toggle"; label: string; default?: boolean;
+             on?: string; off?: string } & Legend)
+        | ({ id: string; type: "range"; label: string; min: number; max: number;
+             step?: number; unit?: string; default?: number } & Legend)
+        | ({ id: string; type: "choice"; label: string;
+             /** An option's own legend replaces the row's while it is the value. */
+             options: (string | number | ({ value: any; label: string } & Legend))[];
+             default?: any } & Legend)
+        | ({ id: string; type: "action"; label: string; button?: string } & Legend);
 }
 
 declare function setTimeout(fn: () => void, ms?: number): number;

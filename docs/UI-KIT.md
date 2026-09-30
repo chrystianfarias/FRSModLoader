@@ -157,6 +157,29 @@ the lit one.
 </div>
 ```
 
+Beside the sheet, a **legend** says what the selected option does: its name, a
+line or two of text and, when it helps, a picture of the effect. Fill it for
+the row that has the focus, and set `hidden` on it when that row has nothing
+to say.
+
+| | |
+|---|---|
+| `.nfs-legend` | the panel; `hidden` hides it |
+| `.nfs-legend__image` | the picture, 16:9; `hidden` for a legend without one |
+| `.nfs-legend__title`, `.nfs-legend__text` | the option's name, and what it does |
+| `.nfs-legend--side` | the legend as a column beside the list: the picture on top, as wide as the column |
+| `.nfs-legend--side.is-empty` | a sidebar with nothing to show keeps its place and dims its text |
+
+```html
+<div class="nfs-legend">
+  <img class="nfs-legend__image" src="legend/camera-far.jpg">
+  <div class="nfs-legend__body">
+    <div class="nfs-legend__title">Camera: Far</div>
+    <p class="nfs-legend__text">Further back and higher: more road ahead in view.</p>
+  </div>
+</div>
+```
+
 Keep the arrows on every row: they hold the column, so the values do not move
 when the selection does. For a row that acts instead of holding a value, put
 empty `<span>`s where the arrows go.

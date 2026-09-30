@@ -802,6 +802,80 @@
 /* A row that can be seen but has no effect now (its mod is off, say). */
 .nfs-option--dim { opacity: .45; }
 
+/* ------------------------------------------------------------- the legend
+ *
+ * What the selected option does, next to the options: its name, a line or
+ * two of explanation and, when it helps, a picture of the effect. The page
+ * fills it for whichever row has the focus and hides it (the hidden
+ * attribute) when that row has nothing to say.
+ *
+ * .nfs-legend--side is the same as a column of its own beside the list - the
+ * picture on top, as wide as the column, the text under it - which is where a
+ * picture is big enough to show something. In a sidebar, keep the legend and
+ * put .is-empty on it instead of hidden, so the layout does not jump.
+ *
+ *   <div class="nfs-legend">
+ *     <img class="nfs-legend__image" src="...">
+ *     <div class="nfs-legend__body">
+ *       <div class="nfs-legend__title">Camera</div>
+ *       <p class="nfs-legend__text">How far behind the car it sits.</p>
+ *     </div>
+ *   </div>
+ */
+.nfs-legend {
+  display: flex;
+  align-items: flex-start;
+  gap: .8em;
+  padding: .6em .7em;
+  border: 1px solid var(--nfs-edge-soft);
+  border-radius: calc(var(--nfs-radius) * .7);
+  background: var(--nfs-panel);
+  font-style: normal;
+}
+.nfs-legend[hidden],
+.nfs-legend__image[hidden] { display: none; }
+
+.nfs-legend__image {
+  flex: none;
+  width: 12em;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, .55);
+}
+
+.nfs-legend__body { min-width: 0; }
+
+.nfs-legend__title {
+  font-weight: 700;
+  font-style: italic;
+  color: var(--nfs-green-bright);
+}
+
+.nfs-legend__text {
+  margin: .2em 0 0;
+  color: var(--nfs-ink-soft);
+  line-height: 1.35;
+}
+.nfs-legend__text:empty { display: none; }
+
+.nfs-legend--side {
+  flex-direction: column;
+  align-items: stretch;
+  gap: .6em;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: .8em;
+}
+.nfs-legend--side .nfs-legend__image { width: 100%; }
+.nfs-legend--side .nfs-legend__title { font-size: 1.15em; }
+.nfs-legend--side.is-empty .nfs-legend__image,
+.nfs-legend--side.is-empty .nfs-legend__title { display: none; }
+.nfs-legend--side.is-empty .nfs-legend__text { color: var(--nfs-ink-dim); }
+
 /* ------------------------------------------------------------------- pulses
  *
  * The game's selection does not move and does not glow: its text breathes -

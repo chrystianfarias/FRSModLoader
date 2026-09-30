@@ -283,7 +283,12 @@ does not draw any of it. It lists what it has, in `mod.json`:
     { "id": "onLift", "type": "toggle", "label": "Pops on lift-off", "default": true,
       "on": "Yes", "off": "No" },
     { "id": "engine", "type": "choice", "label": "Engine",
-      "options": [{ "value": "rb26", "label": "RB26" }, "2JZ", "SR20"], "default": "rb26" },
+      "description": "Which engine's pops to play.",
+      "options": [
+        { "value": "rb26", "label": "RB26", "image": "legend/rb26.jpg",
+          "description": "Nissan's straight six: sharp, high pops." },
+        "2JZ", "SR20"
+      ], "default": "rb26" },
     { "id": "test", "type": "action", "label": "Play a pop", "button": "Play" }
   ]
 }
@@ -297,8 +302,15 @@ does not draw any of it. It lists what it has, in `mod.json`:
 | `action` | a button; `button` names it | none - it sends an event |
 | `section` | a heading row between groups | none |
 
-Every row takes a `label`, and may take a `description` (shown on hover). The
-values are kept by the loader, in `scripts\FRSModLoader\data\settings\<id>.json`
+Every row takes a `label`. Any row may also have a **legend**: a
+`description` (a sentence or two on what it does) and/or an `image` (a picture
+of the effect, relative to the mod's folder; 16:9 reads best). The menu shows
+the legend of whichever row has the focus - with the keys or the mouse - in a
+column beside the settings, the picture on top. A `choice`'s
+options may carry their own `description` and `image`; while that option is
+the value, its legend replaces the row's.
+
+The values are kept by the loader, in `scripts\FRSModLoader\data\settings\<id>.json`
 - not in your folder, so an update of the mod keeps them. The mod reads them:
 
 ```js
