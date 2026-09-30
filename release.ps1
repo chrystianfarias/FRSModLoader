@@ -214,7 +214,7 @@ LICENSE
   FRSModLoader by Chrystian Farias
   https://github.com/chrystianfarias/FRSModLoader
 
-  Copyright (c) 2025 Chrystian Farias. See LICENSE for the terms of use.
+  By Chrystian Farias. See LICENSE for the terms of use.
   Free to redistribute with credit. Selling it is not allowed.
   CEF/Chromium and Ultimate ASI Loader keep their own licenses. All of them
   are in LICENSE.txt, in full.
